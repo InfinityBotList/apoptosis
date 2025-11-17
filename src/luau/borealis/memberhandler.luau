@@ -12,6 +12,6 @@ local function HandleMember(member: bot.FullGuildMemberObject, cacheServerInfo: 
             error(`failed to find required roles for staff member {member.member.user.id} on server {member.guild_id}. Please verify that the web moderator role ({cacheServerInfo.web_moderator_role}) and staff role ({cacheServerInfo.staff_role}) exist in the server.`)
         end
 
-        -- TODO: Finish this
+        -- TODO: Finish this 
     end
 end
