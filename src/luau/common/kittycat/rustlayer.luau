@@ -6,4 +6,10 @@ export type Rust_StaffPermissions = {
     perm_overrides: {kittycat.Permission},
 }
 
-return {}
+local function toStaffPermissions(rustPerms: Rust_StaffPermissions): kittycat.StaffPermissions
+    return kittycat.StaffPermissions.new(rustPerms.user_positions, rustPerms.perm_overrides)
+end
+
+return {
+    toStaffPermissions = toStaffPermissions,
+}

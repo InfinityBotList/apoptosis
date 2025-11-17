@@ -19,24 +19,20 @@ export type Bot = {
     getfullmember: (userid: string, guildid: string) -> FullGuildMemberObject?,
     --- Returns information about a role on a guild from cache
     getrole: (guildid: string, roleid: string) -> apitypes.GuildRoleObject?,
-}
-
---- Information about a cache server
-export type CacheServerInfo = {
-    bots_role: string,
-    system_bots_role: string,
-    logs_channel: string,
-    staff_role: string,
-    web_moderator_role: string,
-    name: string,
+    --- Adds a role to a member
+    addrole: (guildid: string, userid: string, roleid: string) -> (),
+    --- Removes a role from a member
+    removerole: (guildid: string, userid: string, roleid: string) -> (),
+    --- Kicks a member from a guild
+    kickmember: (guildid: string, userid: string, reason: string) -> (),
 }
 
 --- Common functions shared across the Omni/IBL backend
 export type SharedLayer = {
     --- Returns the user's staff permissions on Omni/IBL
-    getUserStaffPerms: (userid: string) -> {kittycat.Rust_StaffPermissions},
-    --- Returns information about a cache server
-    getCacheServerInfo: (guildid: string) -> CacheServerInfo,
+    getUserStaffPerms: (userid: string) -> kittycat.Rust_StaffPermissions,
+    --- Returns the bots state
+    getBotState: (botid: string) -> string,
 }
 
 return {}
