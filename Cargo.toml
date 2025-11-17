@@ -1,0 +1,9 @@
+[package]
+name = "apoptosis"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mluau = { git = "https://github.com/mluau/mluau" }
+serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next" }
+tokio = "1.48.0"
