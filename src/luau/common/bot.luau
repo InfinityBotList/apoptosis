@@ -1,6 +1,6 @@
 --!strict
 local apitypes = require"./apitypes"
-local kittycat = require"./kittycat/rustlayer"
+local kittycat = require"./kittycat/kittycat"
 
 --- Full information about a guild member (user + member)
 export type FullGuildMemberObject = {
@@ -30,7 +30,7 @@ export type Bot = {
 --- Common functions shared across the Omni/IBL backend
 export type SharedLayer = {
     --- Returns the user's staff permissions on Omni/IBL
-    getUserStaffPerms: (userid: string) -> kittycat.Rust_StaffPermissions,
+    getUserStaffPerms: (userid: string) -> kittycat.StaffPermissions,
     --- Returns the bots state
     getBotState: (botid: string) -> string,
 }

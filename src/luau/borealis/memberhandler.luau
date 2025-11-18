@@ -1,13 +1,12 @@
 --!strict
 local bot = require"../common/bot"
 local state = require"./state"
-local rustlayer = require"../common/kittycat/rustlayer"
 local kittycat = require"../common/kittycat/kittycat"
 local roleutils = require"../common/utils/roleutils"
 local miscutils = require"../common/utils/misc"
 
-local BOREALIS_CAN_HAVE_STAFF_ROLE = kittycat.Permission.from_string("borealis.can_have_staff_role")
-local BOT_REVIEWER_MARKER = kittycat.Permission.from_string("bot_reviewer.marker")
+local BOREALIS_CAN_HAVE_STAFF_ROLE = kittycat.permissionfromstring("borealis.can_have_staff_role")
+local BOT_REVIEWER_MARKER = kittycat.permissionfromstring("bot_reviewer.marker")
 
 local function handleMemberNotBot(member: bot.FullGuildMemberObject, cacheServerInfo: state.CacheServerInfo)
     local borealis = state.GetState()
@@ -20,9 +19,9 @@ local function handleMemberNotBot(member: bot.FullGuildMemberObject, cacheServer
     end
 
     local userStaffPerms = borealis.sharedlayer.getUserStaffPerms(member.member.user.id)
-    local resolved = rustlayer.toStaffPermissions(userStaffPerms):resolve()
+    local resolved = userStaffPerms:resolve()
 
-    if kittycat.has_perm(resolved, BOREALIS_CAN_HAVE_STAFF_ROLE) then 
+    if resolved:hasperm(BOREALIS_CAN_HAVE_STAFF_ROLE) then 
         print(`Adding staff role to user {member.member.user.id} on server {member.guild_id}`)
         roleutils.addRoleToFullMember(member, cacheServerInfo.staff_role, borealis.bot)
     else 
@@ -30,7 +29,7 @@ local function handleMemberNotBot(member: bot.FullGuildMemberObject, cacheServer
         roleutils.removeRoleFromFullMember(member, cacheServerInfo.staff_role, borealis.bot)
     end
 
-    if kittycat.has_perm(resolved, BOT_REVIEWER_MARKER) then 
+    if resolved:hasperm(BOT_REVIEWER_MARKER) then 
         print(`Adding web moderator role to user {member.member.user.id} on server {member.guild_id}`)
         roleutils.addRoleToFullMember(member, cacheServerInfo.web_moderator_role, borealis.bot)
     else 
