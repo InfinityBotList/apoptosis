@@ -182,6 +182,36 @@ impl LuaUserData for ResolvedPermissions {
     }
 }
 
+struct CheckPatchChangesError(kittycat_perms::CheckPatchChangesError);
+
+impl IntoLua for CheckPatchChangesError {
+    fn into_lua(self, lua: &Lua) -> LuaResult<LuaValue> {
+        let tab = lua.create_table()?;
+
+        match self.0 {
+            kittycat_perms::CheckPatchChangesError::NoPermission { permission } => {
+                tab.set("type", "NoPermission")?;
+                let perm_userdata = Permission::from(permission);
+                tab.set("permission", perm_userdata)?;
+            }
+            kittycat_perms::CheckPatchChangesError::LacksNegatorForWildcard {
+                wildcard,
+                negator,
+            } => {
+                tab.set("type", "LacksNegatorForWildcard")?;
+                let wildcard_userdata = Permission::from(wildcard);
+                let negator_userdata = Permission::from(negator);
+                tab.set("wildcard", wildcard_userdata)?;
+                tab.set("negator", negator_userdata)?;
+            }
+        }
+
+        tab.set_readonly(true);
+
+        Ok(LuaValue::Table(tab))
+    }
+}
+
 #[allow(dead_code)]
 /// Creates the base kittycat table for Luau side
 pub fn kittycat_base_tab(lua: &Lua) -> LuaResult<LuaTable> {
@@ -200,6 +230,30 @@ pub fn kittycat_base_tab(lua: &Lua) -> LuaResult<LuaTable> {
         lua.create_function(|_lua, (perms, perm): (Vec<String>, String)| {
             Ok(kittycat_perms::has_perm_str(&perms, &perm))
         })?,
+    )?;
+
+    tab.set(
+        "checkpatchchanges",
+        lua.create_function(
+            |lua,
+             (manager_perms, current_perms, new_perms): (
+                LuaUserDataRef<ResolvedPermissions>,
+                LuaUserDataRef<ResolvedPermissions>,
+                LuaUserDataRef<ResolvedPermissions>,
+            )| {
+                match kittycat_perms::check_patch_changes(
+                    &manager_perms.perms,
+                    &current_perms.perms,
+                    &new_perms.perms,
+                ) {
+                    Ok(_) => Ok((true, LuaValue::Nil)),
+                    Err(err) => {
+                        let err = CheckPatchChangesError(err).into_lua(lua)?;
+                        Ok((false, err))
+                    }
+                }
+            },
+        )?,
     )?;
 
     Ok(tab)

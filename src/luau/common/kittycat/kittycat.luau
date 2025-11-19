@@ -34,7 +34,7 @@ export type ResolvedPermissions = {
     hasperm: (self: ResolvedPermissions, perm: Permission) -> boolean,
 }
 
-local function haspermstr(perms: {string}, perm_str: string)
+local function haspermstr(perms: {string}, perm_str: string): boolean
     error("implemented by rust")
 end
 
@@ -62,7 +62,7 @@ local function cpce_to_string(err: CheckPatchChangesError?): string
     end
 end
 
-local function check_patch_changes(manager_perms: {Permission}, current_perms: {Permission}, new_perms: {Permission}): (boolean, CheckPatchChangesError?)
+local function checkpatchchanges(manager_perms: {Permission}, current_perms: {Permission}, new_perms: {Permission}): (boolean, CheckPatchChangesError?)
     error("implemented by rust")
 end
 
@@ -73,7 +73,7 @@ end
 return {
     permissionfromstring = permissionfromstring,
     haspermstr = haspermstr,
-    check_patch_changes = check_patch_changes,
+    checkpatchchanges = checkpatchchanges,
     check_patch_changes_str = check_patch_changes_str,
     cpce_to_string = cpce_to_string,
 }

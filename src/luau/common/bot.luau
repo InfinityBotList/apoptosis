@@ -4,35 +4,63 @@ local kittycat = require"./kittycat/kittycat"
 
 --- Full information about a guild member (user + member)
 export type FullGuildMemberObject = {
-    guild_id: string,
-    member: apitypes.GuildMemberObject,
-    presence: apitypes.PresenceObject?,
+    --- The guild id
+    read guild_id: string,
+    --- The member information
+    read member: apitypes.GuildMemberObject,
+    --- The user's presence information
+    read presence: apitypes.PresenceObject?,
 }
 
 --- A shared bot interface
 export type Bot = {
     --- Returns the user object given a user id
-    getuser: (id: string) -> apitypes.UserObject,
+    read GetUser: (self: Bot, id: string) -> apitypes.UserObject,
     --- Returns the presence object given a user id and guild id
-    getmember: (userid: string, guildid: string) -> apitypes.GuildMemberObject?,
+    read GetMember: (self: Bot, userid: string, guildid: string) -> apitypes.GuildMemberObject?,
     --- Returns all information about a userid/guildid (member+presence)
-    getfullmember: (userid: string, guildid: string) -> FullGuildMemberObject?,
+    read GetFullMember: (self: Bot, userid: string, guildid: string) -> FullGuildMemberObject?,
     --- Returns information about a role on a guild from cache
-    getrole: (guildid: string, roleid: string) -> apitypes.GuildRoleObject?,
+    read GetRole: (self: Bot, guildid: string, roleid: string) -> apitypes.GuildRoleObject?,
     --- Adds a role to a member
-    addrole: (guildid: string, userid: string, roleid: string) -> (),
+    read AddRole: (self: Bot, guildid: string, userid: string, roleid: string) -> (),
     --- Removes a role from a member
-    removerole: (guildid: string, userid: string, roleid: string) -> (),
+    read RemoveRole: (self: Bot, guildid: string, userid: string, roleid: string) -> (),
     --- Kicks a member from a guild
-    kickmember: (guildid: string, userid: string, reason: string) -> (),
+    read KickMember: (self: Bot, guildid: string, userid: string, reason: string) -> (),
+}
+
+
+--- Information about a cache server
+export type CacheServerInfo = {
+    bots_role: string,
+    system_bots_role: string,
+    logs_channel: string,
+    staff_role: string,
+    web_moderator_role: string,
+    name: string,
+    invite_code: string,
+}
+
+export type CacheServerManager = {
+    --- Returns information about a cache server
+    read Get: (self: CacheServerManager, guildid: string) -> CacheServerInfo?,
+    --- Returns the cache server id for a bot given its bot id
+    read LookupBot: (self: CacheServerManager, botid: string) -> string?,
+    --- Removes a bot from its cache server
+    read RemoveBot: (self: CacheServerManager, botid: string) -> (),
+    --- Deletes a cache server
+    read Delete: (self: CacheServerManager, guildid: string) -> (),
 }
 
 --- Common functions shared across the Omni/IBL backend
 export type SharedLayer = {
     --- Returns the user's staff permissions on Omni/IBL
-    getUserStaffPerms: (userid: string) -> kittycat.StaffPermissions,
+    read GetUserStaffPerms: (self: SharedLayer, userid: string) -> kittycat.StaffPermissions,
     --- Returns the bots state
-    getBotState: (botid: string) -> string,
+    read GetBotState: (self: SharedLayer, botid: string) -> string,
+    --- Returns information about a cache server
+    read CacheServer: CacheServerManager
 }
 
 return {}
