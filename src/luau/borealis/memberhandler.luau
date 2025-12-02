@@ -1,7 +1,7 @@
 --!strict
 local bot = require"../common/bot"
 local state = require"./state"
-local kittycat = require"../common/kittycat/kittycat"
+local kittycat = require"@omniplex-rust/kittycat"
 local roleutils = require"../common/utils/roleutils"
 local miscutils = require"../common/utils/misc"
 

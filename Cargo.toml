@@ -12,3 +12,6 @@ serenity = { git = "https://github.com/serenity-rs/serenity", branch = "next" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
 tokio = "1.48.0"
 kittycat = { git = "https://github.com/infinitybotlist/kittycat" }
+tokio-util = { version = "0.7", features = ["full"] }
+log = "0.4.29"
+vfs = { git = "https://github.com/Anti-Raid/rust-vfs" } # TODO: switch to a omniplex fork soon
