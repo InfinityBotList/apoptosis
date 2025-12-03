@@ -1,20 +1,23 @@
+use mlua_scheduler::LuaSchedulerAsyncUserData;
+use mluau::prelude::*;
+use serde::{Serialize, de::DeserializeOwned};
 use std::rc::Rc;
-
 use tokio::task::spawn_local;
 use tokio::{
     runtime::LocalOptions,
     select,
     sync::{
         mpsc::{UnboundedReceiver, UnboundedSender},
-        oneshot::{Receiver as OneshotReceiver, Sender as OneshotSender},
+        oneshot::{Receiver as OneshotReceiver, Sender as OneshotSender, channel},
     },
 };
 use tokio_util::sync::CancellationToken;
 
 type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
+/// A layer provides a specific service within Omniplex/IBL
 pub trait Layer: Sized + 'static {
-    type Message: serde::Serialize + serde::de::DeserializeOwned + Send + 'static;
+    type Message: Serialize + DeserializeOwned + Send + 'static;
 
     async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -24,8 +27,9 @@ pub trait Layer: Sized + 'static {
 }
 
 /// A LayerThread provides a dedicated thread for a specific IBL apoptosis layer
+#[allow(dead_code)]
+#[derive(Clone)]
 pub struct LayerThread<L: Layer> {
-    thread_handle: std::thread::JoinHandle<()>,
     tx: UnboundedSender<(L::Message, OneshotSender<DispatchLayerResult>)>,
     cancellation_token: CancellationToken,
 }
@@ -38,7 +42,7 @@ impl<L: Layer> LayerThread<L> {
         let cancellation_token = CancellationToken::new();
         let ct_clone = cancellation_token.clone();
 
-        let thread_handle = std::thread::Builder::new()
+        std::thread::Builder::new()
             .name(format!("LayerThread-{}", std::any::type_name::<L>()))
             .spawn(move || {
                 Self::thread(ct_clone, rx);
@@ -46,7 +50,6 @@ impl<L: Layer> LayerThread<L> {
             .expect("Failed to spawn VM thread");
 
         Self {
-            thread_handle,
             tx,
             cancellation_token,
         }
@@ -91,7 +94,7 @@ impl<L: Layer> LayerThread<L> {
         let (tx, rx): (
             OneshotSender<DispatchLayerResult>,
             OneshotReceiver<DispatchLayerResult>,
-        ) = tokio::sync::oneshot::channel();
+        ) = channel();
 
         self.tx
             .send((msg, tx))
@@ -101,5 +104,32 @@ impl<L: Layer> LayerThread<L> {
             Ok(result) => result,
             Err(e) => Err(format!("Failed to receive response from layer thread: {e}").into()),
         }
+    }
+}
+
+impl<L: Layer> Drop for LayerThread<L> {
+    fn drop(&mut self) {
+        self.cancellation_token.cancel();
+    }
+}
+
+impl<L: Layer> LuaUserData for LayerThread<L> {
+    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
+        methods.add_scheduler_async_method("Dispatch", |lua, this, msg: LuaValue| async move {
+            let msg: L::Message = lua
+                .from_value(msg)
+                .map_err(|e| LuaError::external(format!("Failed to deserialize message: {e}")))?;
+
+            let result = this
+                .dispatch(msg)
+                .await
+                .map_err(|e| LuaError::external(format!("Layer dispatch error: {e}")))?;
+
+            let lua_result = lua
+                .to_value(&result)
+                .map_err(|e| LuaError::external(format!("Failed to serialize result: {e}")))?;
+
+            Ok(lua_result)
+        });
     }
 }
