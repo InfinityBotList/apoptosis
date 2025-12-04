@@ -137,6 +137,14 @@ impl Vm {
         lua.globals()
             .set("require", lua.create_require_function(controller)?)?;
 
+        lua.globals().set(
+            "warn",
+            lua.create_function(|_lua, msg: String| {
+                log::warn!("{msg}");
+                Ok(())
+            })?,
+        )?;
+
         Ok(Self {
             lua: Rc::new(RefCell::new(Some(lua))),
             compiler,
