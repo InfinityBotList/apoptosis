@@ -1,5 +1,7 @@
 local shared = require"../common/bot"
 
+local MAX_PER_CACHE_SERVER = 40
+
 export type BorealisConfig = {
     needed_bots: {{
         id: string,
@@ -17,4 +19,5 @@ export type Borealis = {
 }
 
 return {
+    MAX_PER_CACHE_SERVER = MAX_PER_CACHE_SERVER,
 }

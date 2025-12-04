@@ -44,6 +44,17 @@ pub(super) fn normalize_path(path: &Path) -> PathBuf {
         components.push_front(Component::CurDir);
     }
 
-    // Join the components back together
-    components.into_iter().collect()
+    // WINDOWS SPECIFIC FIX
+    #[cfg(windows)]
+    {
+        // We dont want \\ style paths
+        let path: PathBuf = components.into_iter().collect();
+        PathBuf::from(path.to_string_lossy().replace('\\', "/"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Join the components back together
+        components.into_iter().collect()
+    }
 }

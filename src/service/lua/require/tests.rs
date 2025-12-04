@@ -11,6 +11,13 @@ fn create_luaurc_with_aliases(aliases: indexmap::IndexMap<String, String>) -> St
 
 #[test]
 fn test_basic_nested_require() {
+    // Create a logger that emits trace log level with env_logger
+    env_logger::builder()
+        .is_test(true)
+        .filter_level(log::LevelFilter::Trace)
+        .try_init()
+        .expect("Failed to init logger");
+
     let mut tree = std::collections::HashMap::new();
     tree.insert("init.luau".to_string(), "".to_string());
     tree.insert(
@@ -119,7 +126,14 @@ fn test_reqtest() {
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    let c = FilesystemWrapper::new(vfs::PhysicalFS::new(base_path.join("tests")));
+    let c = FilesystemWrapper::new(vfs::PhysicalFS::new(
+        base_path
+            .join("src")
+            .join("service")
+            .join("lua")
+            .join("require")
+            .join("tests"),
+    ));
 
     let c = AssetRequirer::new(c, "reqtest".to_string(), lua.globals());
 
