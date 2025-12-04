@@ -21,7 +21,8 @@ pub struct VmCreateOpts {
     give_time: Duration,
 }
 
-type OnBrokenFunc = Box<dyn Fn()>;
+pub type OnBrokenFunc = Box<dyn Fn()>;
+pub type OnDropFunc = Box<dyn Fn()>;
 
 struct FunctionCache(RefCell<HashMap<String, LuaFunction>>);
 
@@ -198,6 +199,14 @@ impl Vm {
     pub fn set_on_broken(&self, callback: OnBrokenFunc) {
         log::debug!("Setting on_broken callback");
         self.on_broken.borrow_mut().replace(callback);
+    }
+
+    /// Registers a callback to be called when the vm is dropped/closed
+    pub fn set_on_close(&self, f: OnDropFunc) {
+        let lua_opt = self.lua.borrow();
+        if let Some(ref lua) = *lua_opt {
+            lua.set_on_close(f);
+        }
     }
 
     /// Sandboxes the VM, making globals readonly etc.

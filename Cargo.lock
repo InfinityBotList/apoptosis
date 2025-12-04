@@ -1939,7 +1939,7 @@ dependencies = [
 [[package]]
 name = "serenity"
 version = "0.12.4"
-source = "git+https://github.com/serenity-rs/serenity?branch=next#e256f9623d9299607f5cb2a1acefc0e8cd5f075e"
+source = "git+https://github.com/infinitybotlist/serenity-apoptosis?branch=next#b38e72d8ba87c5984466e4133c67aa4cf7bf75fc"
 dependencies = [
  "aformat",
  "arrayvec",

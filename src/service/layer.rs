@@ -13,15 +13,36 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::service::lua::{SpawnResult, Vm};
+use crate::service::lua::{
+    FilesystemWrapper, OnBrokenFunc, OnDropFunc, SpawnResult, Vm, VmCreateOpts,
+};
 use crate::service::optional_value::OptionalValue;
 
 type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
+pub struct LayerData<T: IntoLua + 'static> {
+    value: LuaValue,
+    marker: std::marker::PhantomData<T>,
+}
+
+impl<T: IntoLua + 'static> LayerData<T> {
+    pub fn new(layer_data: T, lua: &Lua) -> LuaResult<Self> {
+        let value = layer_data.into_lua(lua)?;
+        Ok(Self {
+            value,
+            marker: std::marker::PhantomData,
+        })
+    }
+}
+
 /// A layer provides a specific service within Omniplex/IBL
 #[allow(dead_code)]
-pub trait Layer: LuaUserData + 'static {
+pub trait Layer: Sized + 'static {
     type Message: Serialize + DeserializeOwned + Send + 'static;
+    type LayerData: IntoLua + 'static;
+
+    /// Returns the layer name
+    fn name() -> &'static str;
 
     /// Creates a new layer
     async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>>;
@@ -33,21 +54,59 @@ pub trait Layer: LuaUserData + 'static {
 
     // Pre-provided helpers
 
+    /// Set up the VM for this layer
+    ///
+    /// Can be called within new() etc
+    async fn setup_vm(
+        opts: VmCreateOpts,
+        fsw: FilesystemWrapper,
+        on_broken: Option<OnBrokenFunc>,
+        on_drop: Option<OnDropFunc>,
+    ) -> Result<Vm, Box<dyn std::error::Error + Send + Sync>> {
+        let mut vm = Vm::new(opts, fsw)
+            .await
+            .map_err(|e| format!("Failed to create VM for layer {}: {}", Self::name(), e))?;
+
+        vm.sandbox()
+            .map_err(|e| format!("Failed to sandbox VM for layer {}: {}", Self::name(), e))?;
+
+        if let Some(on_broken) = on_broken {
+            vm.set_on_broken(on_broken);
+        } else {
+            vm.set_on_broken(Box::new(|| {
+                log::error!("VM for layer {} has broken", Self::name());
+            }));
+        }
+
+        if let Some(on_drop) = on_drop {
+            vm.set_on_close(on_drop);
+        } else {
+            vm.set_on_close(Box::new(|| {
+                log::info!("VM for layer {} has been dropped", Self::name());
+            }));
+        }
+
+        Ok(vm)
+    }
+
     /// Dispatches a message to a VM at the given path
     async fn dispatch_to_vm(
-        self,
         vm: &Vm,
         path: &str,
+        layer_data: LayerData<Self::LayerData>,
         msg: Self::Message,
     ) -> LuaResult<SpawnResult> {
-        let ctx = Context::new(self, msg);
+        let ctx: Context<Self> = Context::new(layer_data, msg);
         vm.run(path, ctx).await
     }
 
     /// Same as dispatch_to_vm but with path as init.luau and return as a DispatchLayerResult
-    async fn dispatch_to_vm_simple(self, vm: &Vm, msg: Self::Message) -> DispatchLayerResult {
-        let res = self
-            .dispatch_to_vm(vm, "init.luau", msg)
+    async fn dispatch_to_vm_simple(
+        vm: &Vm,
+        layer_data: LayerData<Self::LayerData>,
+        msg: Self::Message,
+    ) -> DispatchLayerResult {
+        let res = Self::dispatch_to_vm(vm, "init.luau", layer_data, msg)
             .await
             .map_err(|e| format!("{e}"))?;
 
@@ -167,18 +226,16 @@ impl<L: Layer> LuaUserData for LayerThread<L> {
 
 /// A context for an event
 pub struct Context<L: Layer> {
-    layer: OptionalValue<L>,
-    layer_cache: OptionalValue<LuaAnyUserData>,
+    layer_data: LayerData<L::LayerData>,
     event: OptionalValue<L::Message>,
     event_cache: OptionalValue<LuaValue>,
 }
 
 impl<L: Layer> Context<L> {
     /// Creates a new context
-    pub fn new(layer: L, event: L::Message) -> Self {
+    pub fn new(layer_data: LayerData<L::LayerData>, event: L::Message) -> Self {
         Self {
-            layer: OptionalValue::with(layer),
-            layer_cache: OptionalValue::new(),
+            layer_data,
             event: OptionalValue::with(event),
             event_cache: OptionalValue::new(),
         }
@@ -187,17 +244,7 @@ impl<L: Layer> Context<L> {
 
 impl<L: Layer> LuaUserData for Context<L> {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("layer", |lua, this| {
-            this.layer_cache.get_failable(|| {
-                let layer = this
-                    .layer
-                    .take()
-                    .ok_or("Layer should be set")
-                    .map_err(LuaError::external)?;
-                let ud = lua.create_userdata(layer)?;
-                Ok(ud)
-            })
-        });
+        fields.add_field_method_get("layer", |_lua, this| Ok(this.layer_data.value.clone()));
 
         fields.add_field_method_get("event", |lua, this| {
             this.event_cache.get_failable(|| {
