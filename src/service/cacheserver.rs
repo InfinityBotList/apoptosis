@@ -3,6 +3,7 @@ use mluau::prelude::*;
 use sqlx::Row;
 
 /// CacheServerManager provides methods to manage the cache servers for bots
+#[derive(Clone)]
 pub struct CacheServerManager {
     pool: sqlx::PgPool,
 }

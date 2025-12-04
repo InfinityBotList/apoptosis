@@ -5,17 +5,19 @@ use mlua_scheduler::LuaSchedulerAsyncUserData;
 use mluau::prelude::*;
 use sqlx::Row;
 use sqlx::types::Uuid;
+use std::rc::Rc;
 
 /// SharedLayer provides common methods across IBL's entire backend
 /// to both
 ///
 /// Ideally, every IBL apoptosis layer will have its own SharedLayer
+#[derive(Clone)]
 pub struct SharedLayer {
     pool: sqlx::PgPool,
     cache_server_manager: CacheServerManager,
 
     // Cache any computed fields here
-    cache_server_manager_cache: OptionalValue<LuaAnyUserData>,
+    cache_server_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
 impl SharedLayer {
@@ -27,7 +29,7 @@ impl SharedLayer {
         Self {
             cache_server_manager: CacheServerManager::new(pool.clone()),
             pool,
-            cache_server_manager_cache: OptionalValue::new(),
+            cache_server_manager_cache: OptionalValue::new().into(),
         }
     }
 

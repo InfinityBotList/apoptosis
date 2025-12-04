@@ -9,6 +9,14 @@ impl<T> OptionalValue<T> {
         Self(RefCell::new(None))
     }
 
+    pub fn with(value: T) -> Self {
+        Self(RefCell::new(Some(value)))
+    }
+
+    pub fn take(&self) -> Option<T> {
+        self.0.borrow_mut().take()
+    }
+
     pub fn get(&self, f: impl FnOnce() -> T) -> T
     where
         T: Clone,

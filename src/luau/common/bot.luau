@@ -1,6 +1,6 @@
 --!strict
 local apitypes = require"./apitypes"
-local kittycat = require"./kittycat/kittycat"
+local kittycat = require"@omniplex-rust/kittycat"
 
 --- Full information about a guild member (user + member)
 export type FullGuildMemberObject = {
@@ -61,6 +61,18 @@ export type SharedLayer = {
     read GetBotState: (self: SharedLayer, botid: string) -> string,
     --- Returns information about a cache server
     read CacheServer: CacheServerManager
+}
+
+--- The context passed as the argument to all omniplex layer invokations
+export type Context<BaseLayer, LayerEvent> = {
+    read layer: BaseLayer,
+    read event: LayerEvent,
+}
+
+--- A LayerThread is a special userdata representing a thread through which events can be sent to other layers
+export type LayerThread<LayerEvent> = {
+    --- Dispatches an event to the layer thread
+    read Dispatch: (self: LayerThread<LayerEvent>, event: LayerEvent) -> (),
 }
 
 return {}

@@ -15,7 +15,7 @@ type CoreModule<'a> = (&'a str, fn(&Lua) -> LuaResult<LuaTable>);
 const CORE_MODULES: &[CoreModule] = &[("@omniplex/kittycat", kittycat_base_tab)];
 
 #[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize, Default)]
-pub(super) struct VmCreateOpts {
+pub struct VmCreateOpts {
     disable_task_lib: bool,
     time_limit: Option<Duration>,
     give_time: Duration,
@@ -27,7 +27,7 @@ struct FunctionCache(RefCell<HashMap<String, LuaFunction>>);
 
 /// The internal VM structure used by VmThread
 #[allow(dead_code)]
-pub(super) struct Vm {
+pub struct Vm {
     /// The Luau VM instance
     lua: Rc<RefCell<Option<Lua>>>,
 
@@ -238,7 +238,7 @@ impl Vm {
     }
 
     /// Runs a script in the vm
-    pub async fn run(&self, path: &str, args: LuaMultiValue) -> Result<SpawnResult, LuaError> {
+    pub async fn run<T: IntoLuaMulti>(&self, path: &str, args: T) -> Result<SpawnResult, LuaError> {
         let code = self
             .fsw
             .get_file(path.to_string())
@@ -299,6 +299,27 @@ impl Vm {
 
         // Update last_execution_time
         self.update_last_execution_time(std::time::Instant::now());
+
+        let args = {
+            let Some(ref lua) = *self.lua.borrow() else {
+                return Err(LuaError::RuntimeError(
+                    "Lua instance is no longer valid".to_string(),
+                ));
+            };
+            match args.into_lua_multi(lua) {
+                Ok(a) => a,
+                Err(e) => {
+                    // Mark memory error'd VMs as broken automatically to avoid user grief/pain
+                    if let LuaError::MemoryError(_) = e {
+                        // Mark VM as broken
+                        self.mark_broken(true)
+                            .map_err(|e| LuaError::external(e.to_string()))?;
+                    }
+
+                    return Err(e);
+                }
+            }
+        };
 
         let res = self.scheduler.spawn_thread_and_wait(thread, args).await?;
 
@@ -391,8 +412,46 @@ pub struct SpawnResult {
     result: Option<LuaMultiValue>,
 }
 
+#[allow(dead_code)]
 impl SpawnResult {
     pub(crate) fn new(result: Option<LuaMultiValue>) -> Self {
         Self { result }
+    }
+
+    /// Unwraps the spawn result into a LuaMultiValue
+    pub fn into_inner(self) -> Option<LuaMultiValue> {
+        self.result
+    }
+
+    /// Converts the spawn result into a specific serializable type
+    pub fn into_value<T: serde::de::DeserializeOwned>(
+        self,
+        vm: &Vm,
+    ) -> Result<Option<T>, LuaError> {
+        if let Some(mut mv) = self.result {
+            let Some(value) = mv.pop_front() else {
+                return Ok(None);
+            };
+
+            let Some(ref lua) = *vm.lua.borrow() else {
+                return Err(LuaError::RuntimeError(
+                    "Lua instance is no longer valid".to_string(),
+                ));
+            };
+
+            let value = lua.from_value(value)?;
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn into_must_value<T: serde::de::DeserializeOwned>(self, vm: &Vm) -> Result<T, LuaError> {
+        match self.into_value::<T>(vm)? {
+            Some(v) => Ok(v),
+            None => Err(LuaError::RuntimeError(
+                "Expected value but got none".to_string(),
+            )),
+        }
     }
 }
