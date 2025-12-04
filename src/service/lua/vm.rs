@@ -1,12 +1,14 @@
+use super::require::{AssetRequirer, FilesystemWrapper};
 use mlua_scheduler::{ReturnTracker, TaskManager, taskmgr::Hooks};
 use mluau::{Compiler, prelude::*};
 use std::{
     cell::{Cell, RefCell},
+    collections::HashMap,
     rc::Rc,
     time::{Duration, Instant},
 };
 
-use crate::service::kittycat::kittycat_base_tab;
+use crate::{Error, service::kittycat::kittycat_base_tab};
 
 // Core modules
 type CoreModule<'a> = (&'a str, fn(&Lua) -> LuaResult<LuaTable>);
@@ -20,7 +22,8 @@ pub(super) struct VmCreateOpts {
 }
 
 type OnBrokenFunc = Box<dyn Fn()>;
-pub(super) type Error = Box<dyn std::error::Error + Send + Sync>;
+
+struct FunctionCache(RefCell<HashMap<String, LuaFunction>>);
 
 /// The internal VM structure used by VmThread
 #[allow(dead_code)]
@@ -33,6 +36,9 @@ pub(super) struct Vm {
 
     /// The task manager for scheduling Luau tasks
     scheduler: TaskManager,
+
+    /// The last time the VM executed a script
+    last_execution_time: Rc<Cell<Option<Instant>>>,
 
     /// The time limit for execution
     time_limit: Rc<Cell<Option<Duration>>>,
@@ -52,11 +58,17 @@ pub(super) struct Vm {
 
     /// Whether the VM is sandboxed or not
     sandboxed: Rc<Cell<bool>>,
+
+    /// The underlying filesystem wrapper
+    fsw: FilesystemWrapper,
+
+    /// Function cache for the VM
+    function_cache: FunctionCache,
 }
 
 #[allow(dead_code)]
 impl Vm {
-    pub(super) async fn new(opts: VmCreateOpts) -> LuaResult<Self> {
+    pub async fn new(opts: VmCreateOpts, fsw: FilesystemWrapper) -> LuaResult<Self> {
         let lua = Lua::new_with(
             LuaStdLib::ALL_SAFE,
             LuaOptions::new()
@@ -120,6 +132,11 @@ impl Vm {
             lua.register_module(mod_name, mod_loader(&lua)?)?;
         }
 
+        let controller = AssetRequirer::new(fsw.clone(), "srv".to_string(), lua.globals());
+
+        lua.globals()
+            .set("require", lua.create_require_function(controller)?)?;
+
         Ok(Self {
             lua: Rc::new(RefCell::new(Some(lua))),
             compiler,
@@ -129,10 +146,22 @@ impl Vm {
             broken,
             on_broken: Rc::new(RefCell::new(None)),
             sandboxed: Rc::new(Cell::new(false)),
+            fsw,
+            function_cache: FunctionCache(RefCell::new(HashMap::new())),
+            last_execution_time: Rc::new(Cell::new(None)),
         })
     }
 
-    pub(super) fn mark_broken(&self, broken: bool) -> Result<(), Error> {
+    /// Updates the last execution time
+    pub fn update_last_execution_time(&self, time: Instant) {
+        self.last_execution_time.set(Some(time));
+
+        // Update the execution stop time as well
+        self.execution_stop_time
+            .set(self.time_limit.get().map(|limit| time + limit));
+    }
+
+    pub fn mark_broken(&self, broken: bool) -> Result<(), Error> {
         log::debug!("Marking vm as broken");
         let mut stat = Ok(());
         match self.close() {
@@ -158,13 +187,13 @@ impl Vm {
     }
 
     /// Registers a callback to be called when the vm is marked as broken
-    pub(super) fn set_on_broken(&self, callback: OnBrokenFunc) {
+    pub fn set_on_broken(&self, callback: OnBrokenFunc) {
         log::debug!("Setting on_broken callback");
         self.on_broken.borrow_mut().replace(callback);
     }
 
     /// Sandboxes the VM, making globals readonly etc.
-    pub(super) fn sandbox(&mut self) -> Result<(), LuaError> {
+    pub fn sandbox(&mut self) -> Result<(), LuaError> {
         if self.sandboxed.get() {
             return Ok(());
         }
@@ -182,7 +211,7 @@ impl Vm {
     /// Returns the current memory usage of the vm
     ///
     /// Returns `0` if the lua vm is not valid
-    pub(super) fn memory_usage(&self) -> usize {
+    pub fn memory_usage(&self) -> usize {
         let Some(ref lua) = *self.lua.borrow() else {
             return 0;
         };
@@ -193,14 +222,111 @@ impl Vm {
     ///
     /// The memory limit is set in bytes and will be enforced by the lua vm itself
     /// (e.g. using mlua)
-    pub(super) fn set_memory_limit(&self, limit: usize) -> Result<usize, LuaError> {
+    pub fn set_memory_limit(&self, limit: usize) -> Result<usize, LuaError> {
         let Some(ref lua) = *self.lua.borrow() else {
             return Err(LuaError::RuntimeError("Lua VM is not valid".to_string()));
         };
         lua.set_memory_limit(limit)
     }
 
-    pub(super) fn close(&self) -> Result<(), Error> {
+    /// Runs a script in the vm
+    pub async fn run(&self, path: &str, args: LuaMultiValue) -> Result<SpawnResult, LuaError> {
+        let code = self
+            .fsw
+            .get_file(path.to_string())
+            .map_err(|e| LuaError::RuntimeError(format!("Failed to load asset '{path}': {e}")))?;
+
+        self.update_last_execution_time(Instant::now()); // Update last execution time
+
+        let thread = {
+            let Some(ref lua) = *self.lua.borrow() else {
+                return Err(LuaError::RuntimeError(
+                    "Lua instance is no longer valid".to_string(),
+                ));
+            };
+
+            let mut cache = self.function_cache.0.borrow_mut();
+            let f = if let Some(f) = cache.get(path) {
+                f.clone() // f is cheap to clone
+            } else {
+                let bytecode = self.compiler.compile(code)?;
+
+                let function = match lua
+                    .load(&bytecode)
+                    .set_name(path.to_string())
+                    .set_mode(mluau::ChunkMode::Binary) // Ensure auto-detection never selects binary mode
+                    //.set_environment(self.global_table.clone())
+                    .into_function()
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        // Mark memory error'd VMs as broken automatically to avoid user grief/pain
+                        if let LuaError::MemoryError(_) = e {
+                            // Mark VM as broken
+                            self.mark_broken(true)
+                                .map_err(|e| LuaError::external(e.to_string()))?;
+                        }
+                        return Err(e);
+                    }
+                };
+
+                cache.insert(path.to_string(), function.clone());
+                function
+            };
+
+            match lua.create_thread(f) {
+                Ok(f) => f,
+                Err(e) => {
+                    // Mark memory error'd VMs as broken automatically to avoid user grief/pain
+                    if let LuaError::MemoryError(_) = e {
+                        // Mark VM as broken
+                        self.mark_broken(true)
+                            .map_err(|e| LuaError::external(e.to_string()))?;
+                    }
+
+                    return Err(e);
+                }
+            }
+        };
+
+        // Update last_execution_time
+        self.update_last_execution_time(std::time::Instant::now());
+
+        let res = self.scheduler.spawn_thread_and_wait(thread, args).await?;
+
+        // Do a GC
+        {
+            let Some(ref lua) = *self.lua.borrow() else {
+                return Err(LuaError::RuntimeError(
+                    "Lua instance is no longer valid".to_string(),
+                ));
+            };
+
+            lua.gc_collect()?;
+            lua.gc_collect()?; // Twice to ensure we get all the garbage
+        }
+
+        // Now unwrap it
+        let res = match res {
+            Some(Ok(res)) => Some(res),
+            Some(Err(e)) => {
+                // Mark memory error'd VMs as broken automatically to avoid user grief/pain
+                if let LuaError::MemoryError(_) = e {
+                    // Mark VM as broken
+                    self.mark_broken(true)
+                        .map_err(|e| LuaError::external(e.to_string()))?;
+                }
+
+                return Err(e);
+            }
+            None => None,
+        };
+
+        Ok(SpawnResult::new(res))
+    }
+
+    /// Closes the VM, dropping the underlying Lua instance
+    pub fn close(&self) -> Result<(), Error> {
         self.broken.set(true); // Mark the vm as broken if it is closed
 
         {
@@ -250,5 +376,15 @@ impl Hooks for SchedulerHook {
                 self.execution_stop_time.set(None);
             }
         }
+    }
+}
+
+pub struct SpawnResult {
+    result: Option<LuaMultiValue>,
+}
+
+impl SpawnResult {
+    pub(crate) fn new(result: Option<LuaMultiValue>) -> Self {
+        Self { result }
     }
 }

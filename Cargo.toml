@@ -15,3 +15,4 @@ kittycat = { git = "https://github.com/infinitybotlist/kittycat" }
 tokio-util = { version = "0.7", features = ["full"] }
 log = "0.4.29"
 vfs = { git = "https://github.com/Anti-Raid/rust-vfs" } # TODO: switch to a omniplex fork soon
+indexmap = "2.12.1"

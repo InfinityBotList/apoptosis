@@ -105,10 +105,8 @@ impl<L: Layer> LayerThread<L> {
             Err(e) => Err(format!("Failed to receive response from layer thread: {e}").into()),
         }
     }
-}
 
-impl<L: Layer> Drop for LayerThread<L> {
-    fn drop(&mut self) {
+    fn cancel(&self) {
         self.cancellation_token.cancel();
     }
 }
