@@ -18,6 +18,7 @@ pub struct SharedLayer {
 
     // Cache any computed fields here
     cache_server_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
+    shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
 impl SharedLayer {
@@ -30,7 +31,14 @@ impl SharedLayer {
             cache_server_manager: CacheServerManager::new(pool.clone()),
             pool,
             cache_server_manager_cache: OptionalValue::new().into(),
+            shared_layer_ud: OptionalValue::new().into(),
         }
+    }
+
+    /// Returns the SharedLayer as LuaUserData
+    pub fn as_lua_userdata(&self, lua: &Lua) -> LuaResult<LuaAnyUserData> {
+        self.shared_layer_ud
+            .get_failable(|| lua.create_userdata(self.clone()))
     }
 
     /// Returns the state of a bot by its user ID on Omni/IBL

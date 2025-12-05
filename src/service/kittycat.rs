@@ -256,5 +256,7 @@ pub fn kittycat_base_tab(lua: &Lua) -> LuaResult<LuaTable> {
         )?,
     )?;
 
+    tab.set_readonly(true);
+
     Ok(tab)
 }

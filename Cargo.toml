@@ -10,10 +10,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serenity = { git = "https://github.com/infinitybotlist/serenity-apoptosis", branch = "next" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
-tokio = "1.48.0"
+tokio = { version = "1.48.0", features = ["full"] }
 kittycat = { git = "https://github.com/infinitybotlist/kittycat" }
 tokio-util = { version = "0.7", features = ["full"] }
 log = "0.4.29"
-vfs = { git = "https://github.com/Anti-Raid/rust-vfs" } # TODO: switch to a omniplex fork soon
+vfs = { git = "https://github.com/Anti-Raid/rust-vfs", features = ["embedded-fs"] } # TODO: switch to a omniplex fork soon
 indexmap = "2.12.1"
 env_logger = "0.11.8"
+rust-embed = { version = "8.7.0", features = ["debug-embed", "interpolate-folder-path"] }

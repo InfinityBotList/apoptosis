@@ -18,41 +18,110 @@ use crate::service::lua::{
 };
 use crate::service::optional_value::OptionalValue;
 
-type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
+pub type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
-pub struct LayerData<T: IntoLua + 'static> {
+#[derive(Clone)]
+/// A wrapper around layer data to be passed to VMs
+pub struct LayerData<L: Layer> {
+    data: Rc<L::LayerData>,
     value: LuaValue,
-    marker: std::marker::PhantomData<T>,
 }
 
-impl<T: IntoLua + 'static> LayerData<T> {
-    pub fn new(layer_data: T, lua: &Lua) -> LuaResult<Self> {
-        let value = layer_data.into_lua(lua)?;
+#[allow(dead_code)]
+impl<L: Layer> LayerData<L> {
+    pub fn new(layer_data: L::LayerData, lua: &Lua) -> LuaResult<Self> {
+        let value = layer_data.clone().into_lua(lua)?;
         Ok(Self {
+            data: Rc::new(layer_data),
             value,
-            marker: std::marker::PhantomData,
+        })
+    }
+
+    pub fn data(&self) -> &L::LayerData {
+        &self.data
+    }
+}
+
+/// A layer configuration wrapper for ergonomic handling of layer configs
+/// 
+/// Can be optionally used as a ergonomic wrapper around layer configs
+#[derive(Clone)]
+pub struct LayerConfig<L: Layer> {
+    config: L::Config,
+    config_cache: Rc<OptionalValue<LuaValue>>,
+}
+
+#[allow(dead_code)]
+impl<L: Layer> LayerConfig<L> {
+    /// Creates a new LayerConfig
+    pub fn new(config: L::Config) -> Self {
+        Self {
+            config,
+            config_cache: Rc::new(OptionalValue::new()),
+        }
+    }
+
+    pub fn config(&self) -> &L::Config {
+        &self.config
+    }
+
+    /// Converts the config into a LuaValue, caching the result
+    pub fn to_lua_value(&self, lua: &Lua) -> LuaResult<LuaValue> {
+        self.config_cache.get_failable(|| {
+            match lua.to_value(&self.config)? {
+                LuaValue::Table(t) => {
+                    t.set_readonly(true);
+                    Ok(LuaValue::Table(t))
+                },
+                other => Ok(other),
+            }
         })
     }
 }
 
+/// Data passed to layer::new()
+pub struct NewLayerOpts<L: Layer> {
+    pub config: L::Config,
+    pub pool: sqlx::PgPool,
+}
+
 /// A layer provides a specific service within Omniplex/IBL
 #[allow(dead_code)]
-pub trait Layer: Sized + 'static {
-    type Message: Serialize + DeserializeOwned + Send + 'static;
-    type LayerData: IntoLua + 'static;
+pub trait Layer: Clone + Sized + 'static {
+    type Message: Serialize + DeserializeOwned + Send + Default + 'static;
+
+    /// The data type passed to the layer's VMs
+    type LayerData: Clone + IntoLua + 'static;
+
+    /// The configuration type for the layer
+    type Config: Serialize + DeserializeOwned + Send + 'static;
 
     /// Returns the layer name
     fn name() -> &'static str;
 
     /// Creates a new layer
-    async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>>;
+    async fn new(cfg: NewLayerOpts<Self>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Dispatches a message to the layer
     async fn dispatch(&self, msg: Self::Message) -> DispatchLayerResult;
 
-    async fn cleanup(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Cleans up the layer
+    async fn cleanup(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 
     // Pre-provided helpers
+
+    /// Create a LayerData object for this layer
+    fn create_layer_data(
+        layer_data: Self::LayerData,
+        vm: &Vm
+    ) -> LuaResult<LayerData<Self>> {
+        let Some(ref lua) = *vm.borrow_lua() else {
+            return Err(LuaError::external("VM Lua state is not available"));
+        };
+        LayerData::new(layer_data, lua)
+    }
 
     /// Set up the VM for this layer
     ///
@@ -93,7 +162,7 @@ pub trait Layer: Sized + 'static {
     async fn dispatch_to_vm(
         vm: &Vm,
         path: &str,
-        layer_data: LayerData<Self::LayerData>,
+        layer_data: LayerData<Self>,
         msg: Self::Message,
     ) -> LuaResult<SpawnResult> {
         let ctx: Context<Self> = Context::new(layer_data, msg);
@@ -103,10 +172,11 @@ pub trait Layer: Sized + 'static {
     /// Same as dispatch_to_vm but with path as init.luau and return as a DispatchLayerResult
     async fn dispatch_to_vm_simple(
         vm: &Vm,
-        layer_data: LayerData<Self::LayerData>,
+        layer_data: LayerData<Self>,
         msg: Self::Message,
+        entrypoint: &str,
     ) -> DispatchLayerResult {
-        let res = Self::dispatch_to_vm(vm, "init.luau", layer_data, msg)
+        let res = Self::dispatch_to_vm(vm, entrypoint, layer_data, msg)
             .await
             .map_err(|e| format!("{e}"))?;
 
@@ -115,6 +185,11 @@ pub trait Layer: Sized + 'static {
             .map_err(|e| format!("Failed to convert VM result into value: {e}"))?;
 
         Ok(value)
+    }
+
+    /// Load layer in its own thread
+    fn load(opts: NewLayerOpts<Self>) -> LayerThread<Self> {
+        LayerThread::new(opts)
     }
 }
 
@@ -129,7 +204,7 @@ pub struct LayerThread<L: Layer> {
 #[allow(dead_code)]
 impl<L: Layer> LayerThread<L> {
     /// Creates a new VmThread
-    pub fn new() -> Self {
+    pub fn new(opts: NewLayerOpts<L>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let cancellation_token = CancellationToken::new();
         let ct_clone = cancellation_token.clone();
@@ -137,7 +212,7 @@ impl<L: Layer> LayerThread<L> {
         std::thread::Builder::new()
             .name(format!("LayerThread-{}", std::any::type_name::<L>()))
             .spawn(move || {
-                Self::thread(ct_clone, rx);
+                Self::thread(opts, ct_clone, rx);
             })
             .expect("Failed to spawn VM thread");
 
@@ -149,6 +224,7 @@ impl<L: Layer> LayerThread<L> {
 
     /// thread function
     fn thread(
+        opts: NewLayerOpts<L>,
         cancellation_token: CancellationToken,
         mut rx: UnboundedReceiver<(L::Message, OneshotSender<DispatchLayerResult>)>,
     ) {
@@ -158,7 +234,7 @@ impl<L: Layer> LayerThread<L> {
             .unwrap();
 
         rt.block_on(async move {
-            let layer = Rc::new(L::new().await.expect("Failed to create layer"));
+            let layer = Rc::new(L::new(opts).await.expect("Failed to create layer"));
 
             loop {
                 select! {
@@ -182,7 +258,7 @@ impl<L: Layer> LayerThread<L> {
         });
     }
 
-    async fn dispatch(&self, msg: L::Message) -> DispatchLayerResult {
+    pub async fn dispatch(&self, msg: L::Message) -> DispatchLayerResult {
         let (tx, rx): (
             OneshotSender<DispatchLayerResult>,
             OneshotReceiver<DispatchLayerResult>,
@@ -226,14 +302,14 @@ impl<L: Layer> LuaUserData for LayerThread<L> {
 
 /// A context for an event
 pub struct Context<L: Layer> {
-    layer_data: LayerData<L::LayerData>,
+    layer_data: LayerData<L>,
     event: OptionalValue<L::Message>,
     event_cache: OptionalValue<LuaValue>,
 }
 
 impl<L: Layer> Context<L> {
     /// Creates a new context
-    pub fn new(layer_data: LayerData<L::LayerData>, event: L::Message) -> Self {
+    pub fn new(layer_data: LayerData<L>, event: L::Message) -> Self {
         Self {
             layer_data,
             event: OptionalValue::with(event),

@@ -8,11 +8,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Error, service::kittycat::kittycat_base_tab};
+use crate::{Error, service::{kittycat::kittycat_base_tab, json::json_tab}};
 
 // Core modules
 type CoreModule<'a> = (&'a str, fn(&Lua) -> LuaResult<LuaTable>);
-const CORE_MODULES: &[CoreModule] = &[("@omniplex/kittycat", kittycat_base_tab)];
+const CORE_MODULES: &[CoreModule] = &[
+    ("@omniplex-rust/kittycat", kittycat_base_tab),
+    ("@omniplex-rust/json", json_tab),
+];
 
 #[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub struct VmCreateOpts {
@@ -384,6 +387,11 @@ impl Vm {
         self.broken.set(true); // Mark the vm as broken if it is closed
 
         Ok(())
+    }
+
+    /// Returns the underlying Luau VM as a Ref
+    pub fn borrow_lua<'a>(&'a self) -> std::cell::Ref<'a, Option<Lua>> {
+        self.lua.borrow()
     }
 }
 
