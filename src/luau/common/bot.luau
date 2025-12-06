@@ -1,5 +1,5 @@
 --!strict
-local apitypes = require"./apitypes"
+local apitypes = require"./discord/apitypes"
 local kittycat = require"@omniplex-rust/kittycat"
 
 --- Full information about a guild member (user + member)

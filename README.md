@@ -23,3 +23,7 @@ To make development of Omniplex's many different services/features easier, Apopt
     }
 }
 ```
+
+## Vendored code
+
+Large parts of luacore/discord are vendored from the Khronos runtime and modified to work with Omniplex's needs

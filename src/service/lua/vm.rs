@@ -8,13 +8,28 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Error, service::{kittycat::kittycat_base_tab, json::json_tab}};
+use crate::{Error, service::{
+    kittycat::kittycat_base_tab, 
+    json::json_tab, 
+    luacore::{
+        datetime::datetime_tab,
+        datamgmt::datamgmt_tab,
+        interop::interop_plugin,
+        luau::luau_plugin,
+        typesext::typesext_plugin
+    }
+}};
 
 // Core modules
 type CoreModule<'a> = (&'a str, fn(&Lua) -> LuaResult<LuaTable>);
 const CORE_MODULES: &[CoreModule] = &[
     ("@omniplex-rust/kittycat", kittycat_base_tab),
     ("@omniplex-rust/json", json_tab),
+    ("@omniplex-rust/datetime", datetime_tab),
+    ("@omniplex-rust/datamgmt", datamgmt_tab),
+    ("@omniplex-rust/interop", interop_plugin),
+    ("@omniplex-rust/luau", luau_plugin),
+    ("@omniplex-rust/typesext", typesext_plugin),
 ];
 
 #[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize, Default)]

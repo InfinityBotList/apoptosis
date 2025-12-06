@@ -18,3 +18,28 @@ vfs = { git = "https://github.com/Anti-Raid/rust-vfs", features = ["embedded-fs"
 indexmap = "2.12.1"
 env_logger = "0.11.8"
 rust-embed = { version = "8.7.0", features = ["debug-embed", "interpolate-folder-path"] }
+
+# luacore/discord deps
+regex = "1"
+arrayvec = "0.7"
+small-fixed-array = "0.4"
+bstr = "1.9"
+rand = { version = "0.9", features = ["std"] }
+percent-encoding = { version = "2" }
+reqwest = { version = "0.12" }
+extract_map = { version = "0.3", features = ["serde"] }
+bitflags = { version = "2", features = ["serde"] }
+
+# blob encryption
+base64 = "0.22"
+aes-gcm = "0.10"
+argon2 = "0.5"
+zeroize = "1"
+
+# storage deps
+tar = "0.4"
+
+# datetime
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = { version = "0.10", features = ["serde"] }
+chrono_lc = "0.1"
