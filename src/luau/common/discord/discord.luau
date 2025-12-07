@@ -157,7 +157,7 @@ export type CreateReactionOptions = {
     reaction: ReactionType
 }
 
---- Options for deleting the reaction Omniplex has made on Discord
+--- Options for deleting the reaction omniplex has made on Discord
 export type DeleteOwnReactionOptions = {
     --- The channel ID
     channel_id: discord.Snowflake,
@@ -341,7 +341,7 @@ export type ModifyGuildOptions = {
 }
 
 --- Options for checking if a user has the needed Discord permissions to perform an action
-export type OmniplexCheckPermissionsOptions = {
+export type omniplexCheckPermissionsOptions = {
     --- The user ID to check permissions for
     user_id: discord.Snowflake,
     --- The needed permissions
@@ -350,7 +350,7 @@ export type OmniplexCheckPermissionsOptions = {
 
 --- Options for checking if a user has the needed Discord permissions to perform an action 
 --- and is above the target user in terms of hierarchy
-export type OmniplexCheckPermissionsAndHierarchyOptions = {
+export type omniplexCheckPermissionsAndHierarchyOptions = {
     --- The user ID to check permissions for
     user_id: discord.Snowflake,
     --- The target ID to check permissions for
@@ -360,7 +360,7 @@ export type OmniplexCheckPermissionsAndHierarchyOptions = {
 }
 
 --- Extra/additional success response for checking if a user has the needed Discord permissions to perform an action
-export type OmniplexCheckPermissionsResponse = {
+export type omniplexCheckPermissionsResponse = {
     --- The partial guild
     partial_guild: discord.Partial<discord.GuildObject>,
     --- The member
@@ -369,7 +369,7 @@ export type OmniplexCheckPermissionsResponse = {
     permissions: string
 }
 
-export type OmniplexCheckChannelPermissionsOptions = {
+export type omniplexCheckChannelPermissionsOptions = {
     --- The user ID to check permissions for
     user_id: discord.Snowflake,
     --- The channel ID to check permissions for
@@ -378,7 +378,7 @@ export type OmniplexCheckChannelPermissionsOptions = {
     needed_permissions: string
 }
 
-export type OmniplexCheckChannelPermissionsResponse = {
+export type omniplexCheckChannelPermissionsResponse = {
     --- The partial guild
     partial_guild: discord.Partial<discord.GuildObject>,
     --- The channel
@@ -389,7 +389,7 @@ export type OmniplexCheckChannelPermissionsResponse = {
     permissions: string
 }
 
-export type OmniplexFusedMemberSingle = {
+export type omniplexFusedMemberSingle = {
     --- The member
     member: discord.GuildMemberObject,
     --- The resolved permissions of the member in the guild
@@ -398,11 +398,11 @@ export type OmniplexFusedMemberSingle = {
 
 --- A fused member contains both a member, the guild and the resolved permissions of
 --- the member in the guild. This is useful for operations that require both the member and the guild context, such as permission checks.
-export type OmniplexFusedMember = {
+export type omniplexFusedMember = {
     --- The partial guild
     guild: discord.Partial<discord.GuildObject>,
     --- The member and resolved permissions
-    members: {OmniplexFusedMemberSingle}
+    members: {omniplexFusedMemberSingle}
 }
 
 --- Options for creating a guild role
@@ -501,8 +501,8 @@ export type DeleteInviteOptions = {
 
 --- Lazy<{discord.UserObject}>
 type LazyUsersObject = lazy.Lazy<discord.UserObject>
--- Lazy<OmniplexFusedMember>
-type LazyOmniplexFusedMember = lazy.Lazy<OmniplexFusedMember>
+-- Lazy<omniplexFusedMember>
+type LazyomniplexFusedMember = lazy.Lazy<omniplexFusedMember>
 --- Lazy<discord.AuditLogObject>
 type LazyAuditLogObject = lazy.Lazy<discord.AuditLogObject>
 --- Lazy<discord.ChannelObject>
@@ -545,67 +545,49 @@ type LazyGuildMembersObject = lazy.Lazy<{discord.GuildMemberObject}>
 type LazyInviteObjectList = lazy.Lazy<{discord.InviteObject}>
 --- Lazy<discord.InviteObject>
 type LazyInviteObject = lazy.Lazy<discord.InviteObject>
+--- Lazy<discord.PresenceObject>
+type LazyPresenceObject = lazy.Lazy<discord.PresenceObject>
 
 --- DiscordExecutor allows templates to access/use the Discord API in a sandboxed form.
 export type DiscordExecutor = {
-    -- Bulk operations
+    guild_id: string,
 
-    --- When performing bulk operations, Omniplex's standard GCRA based ratelimits might not work so well. 
-    ---
-    --- For this, Omniplex provides a ``Omniplex_bulk_op`` which will return a discord ``Plugin`` that allows performing bulk operations. 
-    ---
-    --- To do a bulk operation, your code must perform one operation at a time, and then call ``Omniplex_bulk_op_wait`` to wait for the enforced wait period
-    --- between each operation (otherwise, Omniplex will reject the operation). Note that Omniplex will automatically no-op if you can still perform another 
-    --- operation.
-    ---
-    --- Note that the calls to ``Omniplex_bulk_op`` and ``Omniplex_bulk_op_wait`` will respect Omniplex's standard GCRA 
-    --- ratelimits (with the exception that global bucket will not be hit) to ensure user code cannot just keep creating 
-    --- new bulk operations.
-    ---
-    --- A bulk operaction executor will expire 10 seconds after the last call to ``Omniplex_bulk_op`` or ``Omniplex_bulk_op_wait`` returns.
-    ---
-    --- An ``action`` can be specified to increase/improve the ratelimits+wait period at the cost of limiting the executor
-    --- to only the ``action`` specified. If no action is specified, the executor will be able to perform any action but with
-    --- harsher ratelimits and a longer enforced wait period.
-    Omniplex_bulk_op: (self: DiscordExecutor, action: string?) -> DiscordExecutor,
-
-    --- @yields
-    ---
-    --- Waits for the bulk operation executor to finish the enforced wait period
-    ---
-    --- Errors if the executor has expired or if the executor is used in a different thread than the one that created it
-    --- or if the executor is not a bulk operation executor (the executor returned by ``Omniplex_bulk_op``).
-    Omniplex_bulk_op_wait: (self: DiscordExecutor) -> nil,
-
-    -- Omniplex helpers
+    -- omniplex helpers
 
     --- @yields
     ---
     --- Checks an audit log reason for validity, errors out if invalid
-    Omniplex_check_reason: (self: DiscordExecutor, reason: string) -> nil,
+    omni_check_reason: (self: DiscordExecutor, reason: string) -> nil,
     
     --- @yields
     ---
     --- Checks if a specified user with an ID of `data.user_id` has the specified permissions in the server
-    Omniplex_check_permissions: (self: DiscordExecutor, data: OmniplexCheckPermissionsOptions) -> OmniplexCheckPermissionsResponse,
+    omni_check_permissions: (self: DiscordExecutor, data: omniplexCheckPermissionsOptions) -> omniplexCheckPermissionsResponse,
 
     --- @yields
     ---
     --- Checks if a specified user with an ID of `data.user_id` has the specified permissions in the server and is above the target user with an ID of `data.target_id` in terms of hierarchy
-    Omniplex_check_permissions_and_hierarchy: (self: DiscordExecutor, data: OmniplexCheckPermissionsAndHierarchyOptions) -> OmniplexCheckPermissionsResponse,
+    omni_check_permissions_and_hierarchy: (self: DiscordExecutor, data: omniplexCheckPermissionsAndHierarchyOptions) -> omniplexCheckPermissionsResponse,
 
     --- @yields
     ---
     --- Checks if a specified user with an ID of `data.user_id` has the specified permissions in the channel `data.channel_id`
-    Omniplex_check_channel_permissions: (self: DiscordExecutor, data: OmniplexCheckChannelPermissionsOptions) -> OmniplexCheckChannelPermissionsResponse,
+    omni_check_channel_permissions: (self: DiscordExecutor, data: omniplexCheckChannelPermissionsOptions) -> omniplexCheckChannelPermissionsResponse,
 
     --- @yields
     ---
     --- Fetches the member and resolved permissions of a user in the guild
     --- (also called a 'fused member' as it contains both the member and the resolved permissions)
-    Omniplex_get_fused_member: (self: DiscordExecutor, ids: {discord.Snowflake}) -> LazyOmniplexFusedMember,
+    omni_get_fused_member: (self: DiscordExecutor, ids: {discord.Snowflake}) -> LazyomniplexFusedMember,
 
     -- Discord API
+
+    -- Gateway
+
+    --- @yields
+    ---
+    --- Returns the presence of a user by ID
+    get_user_presence: (self: DiscordExecutor, user_id: discord.Snowflake) -> LazyPresenceObject,
 
     -- Audit Logs
 
@@ -845,11 +827,11 @@ export type DiscordExecutor = {
     create_reaction: (self: DiscordExecutor, data: CreateReactionOptions) -> nil,
 
     --- @yields
-    --- Deletes the reaction Omniplex has made on a message
+    --- Deletes the reaction omniplex has made on a message
     delete_own_reaction: (self: DiscordExecutor, data: DeleteOwnReactionOptions) -> nil,
 
     --- @yields
-    --- Deletes a reaction another user has made on a message (see ``delete_own_reaction`` for Omniplex's
+    --- Deletes a reaction another user has made on a message (see ``delete_own_reaction`` for omniplex's
     --- reactions)
     delete_user_reaction: (self: DiscordExecutor, data: DeleteUserReactionOptions) -> nil,
 

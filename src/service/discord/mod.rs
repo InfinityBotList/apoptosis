@@ -291,6 +291,9 @@ impl<T: DiscordProvider> DiscordActionExecutor<T> {
 impl<T: DiscordProvider> LuaUserData for DiscordActionExecutor<T> {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_meta_field(LuaMetaMethod::Type, "DiscordActionExecutor");
+        fields.add_field_method_get("guild_id", |_, this| {
+            Ok(this.discord_provider.guild_id().to_string())
+        });
     }
 
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
@@ -299,12 +302,12 @@ impl<T: DiscordProvider> LuaUserData for DiscordActionExecutor<T> {
         });
 
         // Basic helper functions
-        methods.add_method("check_reason", |_, this, reason: String| {
+        methods.add_method("omni_check_reason", |_, this, reason: String| {
             Ok(this.check_reason(&reason))
         });
 
         methods.add_scheduler_async_method(
-            "check_permissions",
+            "omni_check_permissions",
             async move |lua, this, data: LuaValue| {
                 let data = lua.from_value::<structs::OmniCheckPermissionsOptions>(data)?;
                 let (partial_guild, member, permissions) = this
@@ -380,6 +383,22 @@ impl<T: DiscordProvider> LuaUserData for DiscordActionExecutor<T> {
 
             this.get_fused_member(user_ids).await
             .map(Lazy::new)
+        });
+
+        // Gateway
+        methods.add_method("get_user_presence", |lua, this, user_id: String| {
+            let user_id: serenity::all::UserId = user_id
+                .parse()
+                .map_err(|e: ParseIdError| LuaError::external(e.to_string()))?;
+
+            let presence = this
+                .discord_provider
+                .get_user_presence(user_id);
+
+            match presence {
+                Some(p) => lua.to_value(&p),
+                None => Ok(LuaValue::Nil),
+            }
         });
 
         // Audit Log

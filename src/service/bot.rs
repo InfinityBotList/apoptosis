@@ -37,7 +37,7 @@ impl Bot {
 
 impl LuaUserData for Bot {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("guild_http", |lua, this, guild_id: String| {
+        methods.add_method("HTTPForGuild", |lua, this, guild_id: String| {
             let guild_id = guild_id.parse::<GuildId>().map_err(|e| LuaError::external(e))?;
             let provider = LuaDiscordProvider {
                 guild_id,
@@ -72,5 +72,9 @@ impl DiscordProvider for LuaDiscordProvider {
 
     fn current_user(&self) -> Option<serenity::all::CurrentUser> {
         Some(self.cache.current_user().clone())
+    }
+
+    fn serenity_cache(&self) -> &serenity::cache::Cache {
+        &self.cache
     }
 }

@@ -17,8 +17,25 @@ pub trait DiscordProvider: 'static + Clone {
     /// Http client
     fn serenity_http(&self) -> &serenity::http::JsonHttp;
 
+    /// Cache client
+    fn serenity_cache(&self) -> &serenity::cache::Cache;
+
     /// Returns the guild ID
     fn guild_id(&self) -> serenity::all::GuildId;
+
+    // Gateway
+
+    /// Returns the presence for a user in the guild, if any
+    fn get_user_presence(
+        &self,
+        user_id: serenity::all::UserId,
+    ) -> Option<serenity::all::Presence> {
+        let Some(guild) = self.serenity_cache().guild(self.guild_id()) else {
+            return None;
+        };
+
+        guild.presences.get(&user_id).cloned()
+    }
 
     // Audit Log
 
@@ -222,6 +239,10 @@ pub trait DiscordProvider: 'static + Clone {
     ///
     /// This should return an error if the guild does not exist
     async fn get_guild(&self) -> Result<Value, crate::Error> {
+        if let Some(cached_guild) = self.serenity_cache().guild(self.guild_id()) {
+            return Ok(serde_json::to_value(&*cached_guild)?);
+        }
+
         self.serenity_http()
             .get_guild_with_counts(self.guild_id())
             .await
@@ -465,6 +486,14 @@ pub trait DiscordProvider: 'static + Clone {
         &self,
     ) -> Result<Value, crate::Error>
     {
+        if let Some(cached_guild) = self.serenity_cache().guild(self.guild_id()) {
+            let mut roles: Vec<Value> = Vec::new();
+            for role in cached_guild.roles.iter() {
+                roles.push(serde_json::to_value(role)?);
+            }
+            return Ok(Value::Array(roles));
+        }
+
         self.serenity_http()
             .get_guild_roles(self.guild_id())
             .await
@@ -475,6 +504,14 @@ pub trait DiscordProvider: 'static + Clone {
         &self,
         role_id: serenity::all::RoleId,
     ) -> Result<Value, crate::Error> {
+        if let Some(cached_guild) = self.serenity_cache().guild(self.guild_id()) {
+            if let Some(role) = cached_guild.roles.get(&role_id) {
+                return Ok(serde_json::to_value(role)?);
+            } else {
+                return Err(format!("Role {role_id} not found in guild cache").into());
+            }
+        }
+
         self.serenity_http()
             .get_guild_role(self.guild_id(), role_id)
             .await

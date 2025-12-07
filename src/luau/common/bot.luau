@@ -1,33 +1,11 @@
 --!strict
-local apitypes = require"./discord/apitypes"
 local kittycat = require"@omniplex-rust/kittycat"
-
---- Full information about a guild member (user + member)
-export type FullGuildMemberObject = {
-    --- The guild id
-    read guild_id: string,
-    --- The member information
-    read member: apitypes.GuildMemberObject,
-    --- The user's presence information
-    read presence: apitypes.PresenceObject?,
-}
+local discord = require"./discord/discord"
 
 --- A shared bot interface
 export type Bot = {
-    --- Returns the user object given a user id
-    read GetUser: (self: Bot, id: string) -> apitypes.UserObject,
-    --- Returns the presence object given a user id and guild id
-    read GetMember: (self: Bot, userid: string, guildid: string) -> apitypes.GuildMemberObject?,
-    --- Returns all information about a userid/guildid (member+presence)
-    read GetFullMember: (self: Bot, userid: string, guildid: string) -> FullGuildMemberObject?,
-    --- Returns information about a role on a guild from cache
-    read GetRole: (self: Bot, guildid: string, roleid: string) -> apitypes.GuildRoleObject?,
-    --- Adds a role to a member
-    read AddRole: (self: Bot, guildid: string, userid: string, roleid: string) -> (),
-    --- Removes a role from a member
-    read RemoveRole: (self: Bot, guildid: string, userid: string, roleid: string) -> (),
-    --- Kicks a member from a guild
-    read KickMember: (self: Bot, guildid: string, userid: string, reason: string) -> (),
+    --- Returns a discord provider given guild id to use for operations
+    read HTTPForGuild: (self: Bot, guildid: string) -> discord.DiscordExecutor,
 }
 
 

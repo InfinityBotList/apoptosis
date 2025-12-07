@@ -1,26 +1,37 @@
 --!strict
 
-local bot = require"../bot"
+local discord = require"../discord/discord"
+local fullmember = require"./fullmember"
 
 local function addRoleToFullMember(
-    member: bot.FullGuildMemberObject, 
+    ctx: discord.DiscordExecutor,
+    member: fullmember.FullGuildMemberObject, 
     roleid: string,
-    bot: bot.Bot
+    reason: string
 )  
     if table.find(member.member.roles, roleid) == nil then
         -- Role not already present, add it
-        bot:AddRole(member.guild_id, member.member.user.id, roleid)
+        ctx:add_guild_member_role({
+            user_id = member.member.user.id,
+            role_id = roleid,
+            reason = reason,
+        })
     end
 end
 
 local function removeRoleFromFullMember(
-    member: bot.FullGuildMemberObject, 
+    ctx: discord.DiscordExecutor,
+    member: fullmember.FullGuildMemberObject, 
     roleid: string,
-    bot: bot.Bot
+    reason: string
 )  
     if table.find(member.member.roles, roleid) ~= nil then
         -- Role is present, remove it
-        bot:RemoveRole(member.guild_id, member.member.user.id, roleid)
+        ctx:remove_guild_member_role({
+            user_id = member.member.user.id,
+            role_id = roleid,
+            reason = reason,
+        })
     end
 end
 
