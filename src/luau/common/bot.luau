@@ -8,7 +8,6 @@ export type Bot = {
     read HTTPForGuild: (self: Bot, guildid: string) -> discord.DiscordExecutor,
 }
 
-
 --- Information about a cache server
 export type CacheServerInfo = {
     bots_role: string,
@@ -39,6 +38,15 @@ export type SharedLayer = {
     read GetBotState: (self: SharedLayer, botid: string) -> string,
     --- Returns information about a cache server
     read CacheServer: CacheServerManager
+}
+
+export type DiscordEvent = {
+    --- Type of the event
+    base_name: "Discord",
+    --- Event name
+    name: string,
+    --- The raw event data
+    data: any,
 }
 
 --- The context passed as the argument to all omniplex layer invokations

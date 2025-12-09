@@ -1,5 +1,6 @@
 {
     "aliases": {
-        "omniplex-rust": "./common/rust"
+        "omniplex-rust": "./common/rust",
+        "omniplex-common": "./common"
     }
 }

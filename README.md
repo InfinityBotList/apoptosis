@@ -8,7 +8,9 @@ Apoptosis luau layer is designed to be easily modified by anyone with some knowl
 
 ## Layers
 
-To make development of Omniplex's many different services/features easier, Apoptosis uses a layer system where each layer is a self contained service containing both Luau and Rust code. See ``src/layers/sample.rs`` for a simple example of what a layer looks like
+To make development of Omniplex's many different services/features easier, Apoptosis uses a layer system where each layer is a self contained service containing both Luau and Rust code. See ``src/layers/sample.rs`` for a simple example of what a layer looks like.
+
+Most Omniplex layers will use either pure Rust or a mix of Rust and Luau code. A large amount of the Luau boilerplate code is included in ``service`` module.
 
 ## Example Configuration
 
@@ -16,12 +18,41 @@ To make development of Omniplex's many different services/features easier, Apopt
 {
     "base": {
         "max_db_connections": 10,
-        "postgres_url": "postgres://postgres:test@localhost/infinity"
+        "postgres_url": "postgres://infinity:test@localhost/infinity"
     },
     "sample": {
         "foo": "bar"
     }
 }
+```
+
+## Database Setup (Ubuntu)
+
+First, install Postgres 18 using the below commands (copied from [pgdg](https://www.postgresql.org/download/linux/ubuntu/)):
+
+```bash
+# Import the repository signing key:
+sudo apt install curl ca-certificates
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+# Create the repository configuration file:
+. /etc/os-release
+sudo sh -c "echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
+
+# Update the package lists:
+sudo apt update
+
+# Install PostgreSQL 18:
+sudo apt install postgresql-18
+```
+
+Setup a database and user for Omniplex:
+
+```bash
+sudo -u postgres psql
+CREATE USER infinity WITH PASSWORD 'test'; -- Change password as needed
+CREATE DATABASE infinity OWNER infinity;
 ```
 
 ## Vendored code
