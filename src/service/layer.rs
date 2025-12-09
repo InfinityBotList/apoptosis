@@ -12,9 +12,9 @@ use tokio::{
     },
 };
 use tokio_util::sync::CancellationToken;
-
+use mluau_require::FilesystemWrapper;
 use crate::service::lua::{
-    FilesystemWrapper, OnBrokenFunc, OnDropFunc, SpawnResult, Vm, VmCreateOpts,
+    OnBrokenFunc, OnDropFunc, SpawnResult, Vm, VmCreateOpts,
 };
 use crate::service::optional_value::OptionalValue;
 

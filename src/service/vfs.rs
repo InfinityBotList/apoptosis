@@ -1,5 +1,6 @@
-use rust_embed::Embed;
-use super::lua::FilesystemWrapper;
+use mluau_require::rust_embed;
+use mluau_require::Embed;
+use mluau_require::FilesystemWrapper;
 
 #[derive(Embed, Debug)]
 #[folder = "$CARGO_MANIFEST_DIR/src/luau"]
@@ -7,5 +8,5 @@ use super::lua::FilesystemWrapper;
 pub struct LuauBase;
 
 pub fn get_luau_vfs() -> FilesystemWrapper {
-    FilesystemWrapper::new(vfs::EmbeddedFS::<LuauBase>::new())
+    FilesystemWrapper::new(mluau_require::vfs::EmbeddedFS::<LuauBase>::new())
 }

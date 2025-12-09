@@ -1,4 +1,4 @@
-use super::require::{AssetRequirer, FilesystemWrapper};
+use mluau_require::{AssetRequirer, FilesystemWrapper};
 use mlua_scheduler::{ReturnTracker, TaskManager, taskmgr::Hooks};
 use mluau::{Compiler, prelude::*};
 use std::{
