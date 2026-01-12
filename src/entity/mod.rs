@@ -87,7 +87,7 @@ pub trait Entity {
 ///  }
 #[macro_export]
 macro_rules! entity_enum {
-    ($( $name:ident = ( $entity_type:ty, $full_type:ty, $public_type:ty ) ),* $(,)?) => {
+    ($( $name:ident = ( $entity_type:ty, $matcher:pat, $full_type:ty, $public_type:ty ) ),* $(,)?) => {
         #[allow(dead_code)]
         pub type AnyEntityManager = crate::entity::manager::EntityManager<EntityType>;
 
@@ -100,7 +100,7 @@ macro_rules! entity_enum {
             /// Creates a new entity type from the given name.
             pub fn from_name(name: &str, pool: sqlx::PgPool) -> Option<Self> {
                 match name {
-                    $( stringify!($name) => Some(Self::$name(<$entity_type>::new(pool))), )*
+                    $( $matcher => Some(Self::$name(<$entity_type>::new(pool))), )*
                     _ => None,
                 }
             }
@@ -172,5 +172,5 @@ macro_rules! entity_enum {
 }
 
 entity_enum! {
-    Dummy = (entities::Dummy, (), ()),
+    Dummy = (entities::Dummy, "dummy" | "dodo", (), ()),
 }
