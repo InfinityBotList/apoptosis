@@ -6,6 +6,8 @@ pub(crate) mod service;
 pub mod entity;
 pub mod types;
 mod layers;
+pub mod utils;
+pub mod config;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 

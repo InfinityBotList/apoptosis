@@ -49,9 +49,14 @@ pub trait Entity {
     type FullObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
     /// The public object type for the entity
     type PublicObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
+    /// The summary (short form) object type for the entity
+    type SummaryObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
 
     /// Returns the name of the entity type.
     fn name(&self) -> &'static str;
+
+    /// Returns the CDN folder to use when saving assets for this entity type.
+    fn cdn_folder(&self) -> &'static str;
 
     /// Returns the base flags for the entity type.
     fn flags(&self) -> EntityFlags {
@@ -76,6 +81,9 @@ pub trait Entity {
 
     /// Fetches the public object for the entity
     async fn get_public(&self, id: &str) -> Result<Self::PublicObject, crate::Error>;
+
+    /// Fetches the summary (short form) object for the entity
+    async fn get_summary(&self, _id: &str) -> Result<Self::SummaryObject, crate::Error>;
 }
 
 /// Macro to create a enum of entity types
@@ -83,11 +91,11 @@ pub trait Entity {
 /// # Example
 /// ```ignore
 /// entity_enum! {
-///     Bot = (BotEntity, FullBotObject, PublicBotObject),
+///     Bot = (BotEntity, "bot" | "bots", FullBotObject, PublicBotObject, SummaryBotObject),
 ///  }
 #[macro_export]
 macro_rules! entity_enum {
-    ($( $name:ident = ( $entity_type:ty, $matcher:pat, $full_type:ty, $public_type:ty ) ),* $(,)?) => {
+    ($( $name:ident = ( $entity_type:ty, $matcher:pat, $full_type:ty, $public_type:ty, $summary_type:ty ) ),* $(,)?) => {
         #[allow(dead_code)]
         pub type AnyEntityManager = crate::entity::manager::EntityManager<EntityType>;
 
@@ -114,15 +122,26 @@ macro_rules! entity_enum {
         pub enum EntityEnumPublicObject {
             $( $name( $public_type ), )*
         } 
+        #[derive(Debug, Serialize, Deserialize)]
+        pub enum EntityEnumSummaryObject {
+            $( $name( $summary_type ), )*
+        }
 
         #[allow(unused_variables)]
         impl Entity for EntityType {
             type FullObject = EntityEnumFullObject;
             type PublicObject = EntityEnumPublicObject;
+            type SummaryObject = EntityEnumSummaryObject;
 
             fn name(&self) -> &'static str {
                 match self {
-                    $( Self::$name(_) => stringify!($name), )*
+                    $( Self::$name(n) => n.name(), )*
+                }
+            }
+
+            fn cdn_folder(&self) -> &'static str {
+                match self {
+                    $( Self::$name(e) => e.cdn_folder(), )*
                 }
             }
 
@@ -167,10 +186,19 @@ macro_rules! entity_enum {
                     }, )*
                 }
             }
+
+            async fn get_summary(&self, id: &str) -> Result<Self::SummaryObject, crate::Error> {
+                match self {
+                    $( Self::$name(e) => {
+                        let summary = e.get_summary(id).await?;
+                        Ok(EntityEnumSummaryObject::$name(summary))
+                    }, )*
+                }
+            }
         }
     };
 }
 
 entity_enum! {
-    Dummy = (entities::Dummy, "dummy" | "dodo", (), ()),
+    Dummy = (entities::Dummy, "dummy" | "dodo", (), (), ()),
 }

@@ -13,9 +13,14 @@ impl Dummy {
 impl Entity for Dummy {
     type FullObject = ();
     type PublicObject = ();
+    type SummaryObject = ();
 
     fn name(&self) -> &'static str {
         "Dummy"
+    }
+
+    fn cdn_folder(&self) -> &'static str {
+        "dummys"
     }
 
     fn flags(&self) -> EntityFlags {
@@ -35,6 +40,10 @@ impl Entity for Dummy {
     }
 
     async fn get_public(&self, _id: &str) -> Result<Self::PublicObject, crate::Error> {
+        Ok(())
+    }
+
+    async fn get_summary(&self, _id: &str) -> Result<Self::SummaryObject, crate::Error> {
         Ok(())
     }
 }
