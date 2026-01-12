@@ -38,7 +38,7 @@ impl Bot {
 impl LuaUserData for Bot {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("HTTPForGuild", |lua, this, guild_id: String| {
-            let guild_id = guild_id.parse::<GuildId>().map_err(|e| LuaError::external(e))?;
+            let guild_id = guild_id.parse::<GuildId>().map_err(LuaError::external)?;
             let provider = LuaDiscordProvider {
                 guild_id,
                 cache: this.cache.clone(),

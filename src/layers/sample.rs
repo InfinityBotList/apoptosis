@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
-use crate::service::{layer::{DispatchLayerResult, Layer, LayerConfig, LayerData, NewLayerOpts}, lua::{Vm, VmCreateOpts}, sharedlayer::SharedLayer, vfs::get_luau_vfs};
+use crate::service::{layer::{DispatchLayerResult, Layer, LayerConfig, LayerData, NewLayerOpts}, lua::{Vm, RuntimeCreateOpts}, sharedlayer::SharedLayer, vfs::get_luau_vfs};
 use mluau::prelude::*;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -49,7 +49,7 @@ impl Layer for SampleLayer {
 
     async fn new(opts: NewLayerOpts<Self>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let shared = SharedLayer::new(opts.pool);
-        let vm = Self::setup_vm(VmCreateOpts::default(), get_luau_vfs(), None, None).await?;
+        let vm = Self::setup_vm(RuntimeCreateOpts::default(), get_luau_vfs(), None).await?;
 
         let layer_data = Self::create_layer_data(SharedLayerData {
             cfg: LayerConfig::new(opts.config.clone()),
@@ -64,7 +64,7 @@ impl Layer for SampleLayer {
     }
 
     async fn dispatch(&self, msg: Self::Message) -> DispatchLayerResult {
-        Self::dispatch_to_vm_simple(&self.vm, self.layer_data.clone(), msg, "samplelayer/init.luau").await
+        Self::dispatch_to_vm_serde(&self.vm, self.layer_data.clone(), msg, "./samplelayer").await
     }
 }
 

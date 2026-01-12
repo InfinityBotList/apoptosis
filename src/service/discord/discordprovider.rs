@@ -30,9 +30,7 @@ pub trait DiscordProvider: 'static + Clone {
         &self,
         user_id: serenity::all::UserId,
     ) -> Option<serenity::all::Presence> {
-        let Some(guild) = self.serenity_cache().guild(self.guild_id()) else {
-            return None;
-        };
+        let guild = self.serenity_cache().guild(self.guild_id())?;
 
         guild.presences.get(&user_id).cloned()
     }
@@ -460,9 +458,7 @@ pub trait DiscordProvider: 'static + Clone {
             .ban_user(
                 self.guild_id(),
                 user_id,
-                (delete_message_seconds / 86400)
-                    .try_into()
-                    .map_err(|e| format!("Failed to convert ban duration to days: {e}"))?,
+                delete_message_seconds / 86400,
                 reason,
             )
             .await

@@ -1,6 +1,25 @@
+--!strict
 local json = require"@omniplex-rust/json"
+local bot = require"@omniplex-common/bot"
 
-local ctx = ...
-print("Sample layer loaded", ctx, json.stringify(ctx.event), json.stringify(ctx.layer.config))
+type SampleLayerConfig = {
+    foo: string,
+}
 
-return {}
+type SampleLayer = {
+    config: SampleLayerConfig,
+}
+
+type SampleLayerEvent = {
+    type: "Startup",
+    data: {}
+} | {
+    type: "TestEvent",
+    data: string,
+}
+
+local function SampleLayer(ctx: bot.Context<SampleLayer, SampleLayerEvent>) 
+    print("Sample layer loaded", ctx, json.stringify(ctx.event), json.stringify(ctx.layer.config))
+end
+
+return SampleLayer

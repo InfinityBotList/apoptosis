@@ -3,6 +3,8 @@ use sqlx::postgres::PgPoolOptions;
 use crate::{layers::sample::SampleLayerEvent, service::layer::{Layer, NewLayerOpts}};
 
 pub(crate) mod service;
+pub mod entity;
+pub mod types;
 mod layers;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

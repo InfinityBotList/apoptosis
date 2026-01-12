@@ -5,22 +5,8 @@ use chrono::{Datelike, TimeZone, Timelike};
 use chrono_tz::OffsetComponents;
 use mluau::prelude::*;
 
-pub type DateTimeRef = LuaUserDataRef<DateTime<chrono_tz::Tz>>;
-
 pub struct TimeDelta {
     pub timedelta: chrono::TimeDelta,
-}
-
-impl TimeDelta {
-    pub fn new(td: chrono::TimeDelta) -> Self {
-        TimeDelta { timedelta: td }
-    }
-
-    pub fn from_secs(td: i64) -> Self {
-        TimeDelta {
-            timedelta: chrono::Duration::seconds(td),
-        }
-    }
 }
 
 impl LuaUserData for TimeDelta {
@@ -107,23 +93,6 @@ where
     Tz::Offset: std::fmt::Display,
 {
     pub dt: chrono::DateTime<Tz>,
-}
-
-impl<Tz> DateTime<Tz>
-where
-    Tz: chrono::TimeZone + 'static + From<chrono_tz::Tz>,
-    chrono_tz::Tz: From<Tz>,
-    Tz::Offset: std::fmt::Display,
-{
-    pub fn new(dt: chrono::DateTime<Tz>) -> Self {
-        DateTime { dt }
-    }
-
-    pub fn from_utc(dt: chrono::DateTime<chrono::Utc>) -> Self {
-        DateTime {
-            dt: dt.with_timezone(&Tz::from(chrono_tz::Tz::UTC)),
-        }
-    }
 }
 
 impl<Tz> LuaUserData for DateTime<Tz>
@@ -244,12 +213,6 @@ where
 
 pub struct Timezone {
     pub tz: chrono_tz::Tz,
-}
-
-impl Timezone {
-    pub fn new(tz: chrono_tz::Tz) -> Self {
-        Timezone { tz }
-    }
 }
 
 impl LuaUserData for Timezone {

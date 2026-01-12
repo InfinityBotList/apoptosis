@@ -17,6 +17,7 @@ tokio-util = { version = "0.7", features = ["full"] }
 log = "0.4.29"
 indexmap = "2.12.1"
 env_logger = "0.11.8"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 # luacore/discord deps
 regex = "1"

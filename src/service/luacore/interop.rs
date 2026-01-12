@@ -16,7 +16,7 @@ pub fn interop_plugin(lua: &Lua) -> LuaResult<LuaTable> {
 
     module.set(
         "memory_limit",
-        lua.create_function(|lua, _: ()| Ok(lua.memory_limit()?))?,
+        lua.create_function(|lua, _: ()| lua.memory_limit())?,
     )?;
 
     module.set_readonly(true); // Block any attempt to modify this table

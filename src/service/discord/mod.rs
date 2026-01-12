@@ -624,20 +624,16 @@ impl<T: DiscordProvider> LuaUserData for DiscordActionExecutor<T> {
                 }
             }
 
-            if let Some(ref topic) = data.data.topic {
-                if topic.len() > 1024 {
-                    return Err(LuaError::external(
-                        "Topic must be less than 1024 characters",
-                    ));
-                }
+            if let Some(ref topic) = data.data.topic && topic.len() > 1024 {
+                return Err(LuaError::external(
+                    "Topic must be less than 1024 characters",
+                ));
             }
 
-            if let Some(ref rate_limit_per_user) = data.data.rate_limit_per_user {
-                if rate_limit_per_user.get() > 21600 {
-                    return Err(LuaError::external(
-                        "Rate limit per user must be less than 21600 seconds",
-                    ));
-                }
+            if let Some(ref rate_limit_per_user) = data.data.rate_limit_per_user && rate_limit_per_user.get() > 21600 {
+                return Err(LuaError::external(
+                    "Rate limit per user must be less than 21600 seconds",
+                ));
             }
 
             if let Some(ref permission_overwrites) = data.data.permission_overwrites {
@@ -1120,20 +1116,16 @@ impl<T: DiscordProvider> LuaUserData for DiscordActionExecutor<T> {
             .await
             .map_err(LuaError::external)?;
 
-            if let Some(ref topic) = data.data.topic {
-                if topic.len() > 1024 {
-                    return Err(LuaError::external(
-                        "Topic must be less than 1024 characters",
-                    ));
-                }
+            if let Some(ref topic) = data.data.topic && topic.len() > 1024 {
+                return Err(LuaError::external(
+                    "Topic must be less than 1024 characters",
+                ));
             }
 
-            if let Some(ref rate_limit_per_user) = data.data.rate_limit_per_user {
-                if rate_limit_per_user.get() > 21600 {
-                    return Err(LuaError::external(
-                        "Rate limit per user must be less than 21600 seconds",
-                    ));
-                }
+            if let Some(ref rate_limit_per_user) = data.data.rate_limit_per_user && rate_limit_per_user.get() > 21600 {
+                return Err(LuaError::external(
+                    "Rate limit per user must be less than 21600 seconds",
+                ));
             }
 
             if let Some(ref permission_overwrites) = data.data.permission_overwrites {

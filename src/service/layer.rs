@@ -12,9 +12,8 @@ use tokio::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use mluau_require::FilesystemWrapper;
 use crate::service::lua::{
-    OnBrokenFunc, OnDropFunc, SpawnResult, Vm, VmCreateOpts,
+    OnBrokenFunc, RuntimeCreateOpts, Vm
 };
 use crate::service::optional_value::OptionalValue;
 
@@ -117,27 +116,23 @@ pub trait Layer: Clone + Sized + 'static {
         layer_data: Self::LayerData,
         vm: &Vm
     ) -> LuaResult<LayerData<Self>> {
-        let Some(ref lua) = *vm.borrow_lua() else {
-            return Err(LuaError::external("VM Lua state is not available"));
-        };
-        LayerData::new(layer_data, lua)
+        vm.with_lua(|lua| LayerData::new(layer_data, lua))
     }
 
     /// Set up the VM for this layer
     ///
     /// Can be called within new() etc
-    async fn setup_vm(
-        opts: VmCreateOpts,
-        fsw: FilesystemWrapper,
+    async fn setup_vm<FS>(
+        opts: RuntimeCreateOpts,
+        vfs: FS,
         on_broken: Option<OnBrokenFunc>,
-        on_drop: Option<OnDropFunc>,
-    ) -> Result<Vm, Box<dyn std::error::Error + Send + Sync>> {
-        let mut vm = Vm::new(opts, fsw)
+    ) -> Result<Vm, Box<dyn std::error::Error + Send + Sync>> 
+    where
+        FS: mluau_require::vfs::FileSystem + 'static,
+    {
+        let vm = Vm::new(opts, vfs)
             .await
             .map_err(|e| format!("Failed to create VM for layer {}: {}", Self::name(), e))?;
-
-        vm.sandbox()
-            .map_err(|e| format!("Failed to sandbox VM for layer {}: {}", Self::name(), e))?;
 
         if let Some(on_broken) = on_broken {
             vm.set_on_broken(on_broken);
@@ -147,42 +142,41 @@ pub trait Layer: Clone + Sized + 'static {
             }));
         }
 
-        if let Some(on_drop) = on_drop {
-            vm.set_on_close(on_drop);
-        } else {
-            vm.set_on_close(Box::new(|| {
-                log::info!("VM for layer {} has been dropped", Self::name());
-            }));
-        }
-
         Ok(vm)
     }
 
     /// Dispatches a message to a VM at the given path
-    async fn dispatch_to_vm(
+    async fn dispatch_to_vm<A>(
         vm: &Vm,
         path: &str,
         layer_data: LayerData<Self>,
         msg: Self::Message,
-    ) -> LuaResult<SpawnResult> {
+    ) -> LuaResult<A> 
+    where
+        A: mluau::FromLua
+    {
         let ctx: Context<Self> = Context::new(layer_data, msg);
-        vm.run(path, ctx).await
+        let func = vm.eval_script::<mluau::Function>(path)?;
+        let res: A = vm.call_in_scheduler(func, ctx).await?;
+        Ok(res)
     }
 
-    /// Same as dispatch_to_vm but with path as init.luau and return as a DispatchLayerResult
-    async fn dispatch_to_vm_simple(
+    /// Same as dispatch_to_vm but with return as a serde type
+    async fn dispatch_to_vm_serde<T>(
         vm: &Vm,
         layer_data: LayerData<Self>,
         msg: Self::Message,
         entrypoint: &str,
-    ) -> DispatchLayerResult {
-        let res = Self::dispatch_to_vm(vm, entrypoint, layer_data, msg)
+    ) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let res = Self::dispatch_to_vm::<LuaValue>(vm, entrypoint, layer_data, msg)
             .await
             .map_err(|e| format!("{e}"))?;
 
-        let value = res
-            .into_must_value(vm)
-            .map_err(|e| format!("Failed to convert VM result into value: {e}"))?;
+        let value = vm.from_value(res)
+            .map_err(|e| format!("Failed to deserialize response from layer VM: {e}"))?;
 
         Ok(value)
     }

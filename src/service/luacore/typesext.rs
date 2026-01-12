@@ -39,21 +39,12 @@ impl<T: for<'a> serde::Deserialize<'a> + serde::Serialize> MultiOption<T> {
         }
     }
 
-    /// Returns true if the value is None
-    pub fn is_none(&self) -> bool {
-        self.inner.is_none()
-    }
-
     /// Returns true if the value is Some(None)
     pub fn is_some(&self) -> bool {
         self.inner.is_some()
     }
 
-    /// Returns true if the value is Some(Some(_))
-    pub fn is_deep_some(&self) -> bool {
-        matches!(self.inner, Some(Some(_)))
-    }
-
+    /// Returns a reference to the inner value, if any
     pub fn as_inner_ref(&self) -> Option<&T> {
         self.inner.as_ref().and_then(Option::as_ref)
     }
