@@ -3,7 +3,6 @@ pub mod manager;
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
-use serenity::async_trait;
 
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,10 +44,11 @@ pub struct EntityVoteInfo {
 }
 
 #[allow(async_fn_in_trait)]
-#[async_trait]
 pub trait Entity {
-    /// Creates a new entity instance.
-    fn new(pool: sqlx::PgPool) -> Self where Self: Sized;
+    /// The full object type for the entity
+    type FullObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
+    /// The public object type for the entity
+    type PublicObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
 
     /// Returns the name of the entity type.
     fn name(&self) -> &'static str;
@@ -59,27 +59,118 @@ pub trait Entity {
     }
 
     /// Fetches the entity information for the given ID.
-    async fn get_info(&self, id: &str) -> Option<EntityInfo>;
+    async fn get_info(&self, id: &str) -> Result<Option<EntityInfo>, crate::Error>;
 
     /// Returns core vote info about the entity (such as the amount of cooldown time the entity has)
     ///
     /// If user id is specified, then in the future special perks for the user will be returned as well
     ///
     /// If vote time is negative, then it is not possible to revote
-    async fn get_vote_info(&self, id: &str, _user_id: Option<&str>) -> Option<EntityVoteInfo>;
+    async fn get_vote_info(&self, id: &str, _user_id: Option<&str>) -> Result<Option<EntityVoteInfo>, crate::Error>;
 
     /// Any entity specific post-vote actions
     async fn post_vote(&self, _id: &str, _user_id: &str) {}
+
+    /// Fetches the full object for the entity
+    async fn get_full(&self, id: &str) -> Result<Self::FullObject, crate::Error>;
+
+    /// Fetches the public object for the entity
+    async fn get_public(&self, id: &str) -> Result<Self::PublicObject, crate::Error>;
 }
 
-/// Asserts that `dyn Entity` is object safe.
-mod assert_entity_dyn {
-    use super::Entity;
+/// Macro to create a enum of entity types
+/// 
+/// # Example
+/// ```ignore
+/// entity_enum! {
+///     Bot = (BotEntity, FullBotObject, PublicBotObject),
+///  }
+#[macro_export]
+macro_rules! entity_enum {
+    ($( $name:ident = ( $entity_type:ty, $full_type:ty, $public_type:ty ) ),* $(,)?) => {
+        #[allow(dead_code)]
+        pub type AnyEntityManager = crate::entity::manager::EntityManager<EntityType>;
 
-    fn _assert_entity_dyn<T: Entity + ?Sized>() {}
+        #[derive(Debug)]
+        pub enum EntityType {
+            $( $name( $entity_type ), )*
+        }
+        #[allow(unused_variables)]
+        impl EntityType {
+            /// Creates a new entity type from the given name.
+            pub fn from_name(name: &str, pool: sqlx::PgPool) -> Option<Self> {
+                match name {
+                    $( stringify!($name) => Some(Self::$name(<$entity_type>::new(pool))), )*
+                    _ => None,
+                }
+            }
+        }
 
-    #[allow(dead_code)]
-    pub fn assert_entity_dyn_impl() {
-        _assert_entity_dyn::<dyn Entity>();
-    }
+        #[derive(Debug, Serialize, Deserialize)]
+        pub enum EntityEnumFullObject {
+            $( $name( $full_type ), )*
+        }
+        #[derive(Debug, Serialize, Deserialize)]
+        pub enum EntityEnumPublicObject {
+            $( $name( $public_type ), )*
+        } 
+
+        #[allow(unused_variables)]
+        impl Entity for EntityType {
+            type FullObject = EntityEnumFullObject;
+            type PublicObject = EntityEnumPublicObject;
+
+            fn name(&self) -> &'static str {
+                match self {
+                    $( Self::$name(_) => stringify!($name), )*
+                }
+            }
+
+            fn flags(&self) -> EntityFlags {
+                match self {
+                    $( Self::$name(e) => e.flags(), )*
+                }
+            }
+
+            async fn get_info(&self, id: &str) -> Result<Option<EntityInfo>, crate::Error> {
+                match self {
+                    $( Self::$name(e) => e.get_info(id).await, )*
+                }
+            }
+
+            async fn get_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<Option<EntityVoteInfo>, crate::Error> {
+                match self {
+                    $( Self::$name(e) => e.get_vote_info(id, user_id).await, )*
+                }
+            }
+
+            async fn post_vote(&self, id: &str, user_id: &str) {
+                match self {
+                    $( Self::$name(e) => e.post_vote(id, user_id).await, )*
+                }
+            }
+
+            async fn get_full(&self, id: &str) -> Result<Self::FullObject, crate::Error> {
+                match self {
+                    $( Self::$name(e) => {
+                        let full = e.get_full(id).await?;
+                        Ok(EntityEnumFullObject::$name(full))
+                    }, )*
+                }
+            }
+
+            async fn get_public(&self, id: &str) -> Result<Self::PublicObject, crate::Error> {
+                match self {
+                    $( Self::$name(e) => {
+                        let public = e.get_public(id).await?;
+                        Ok(EntityEnumPublicObject::$name(public))
+                    }, )*
+                }
+            }
+        }
+    };
+}
+
+entity_enum! {
+    Dummy = (entities::Dummy, (), ()),
 }

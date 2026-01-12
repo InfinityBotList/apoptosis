@@ -7,8 +7,7 @@ pub struct EntityManager<E: Entity> {
 
 impl<E: Entity> EntityManager<E> {
     /// Creates a new entity manager instance.
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        let entity = E::new(pool.clone());
+    pub fn new(entity: E, pool: sqlx::PgPool) -> Self {
         Self { pool, entity }
     }
 
