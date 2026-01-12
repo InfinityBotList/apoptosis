@@ -115,14 +115,17 @@ macro_rules! entity_enum {
         }
 
         #[derive(Debug, Serialize, Deserialize)]
+        #[serde(tag = "type")]
         pub enum EntityEnumFullObject {
             $( $name( $full_type ), )*
         }
         #[derive(Debug, Serialize, Deserialize)]
+        #[serde(tag = "type")]
         pub enum EntityEnumPublicObject {
             $( $name( $public_type ), )*
         } 
         #[derive(Debug, Serialize, Deserialize)]
+        #[serde(tag = "type")]
         pub enum EntityEnumSummaryObject {
             $( $name( $summary_type ), )*
         }
