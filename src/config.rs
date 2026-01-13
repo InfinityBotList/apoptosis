@@ -7,8 +7,11 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config::load().expect("Fa
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
+    /// Base URL for CDN
     pub cdn_url: String,
+    /// Path on disk for CDN storage
     pub cdn_path: String,
+    /// Proxy URL for outgoing requests
     pub proxy_url: String,
 }
 
