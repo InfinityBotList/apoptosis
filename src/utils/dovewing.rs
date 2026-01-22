@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serenity::all::UserId;
 use sqlx::PgPool;
 use serenity::model::user::OnlineStatus;
@@ -106,93 +108,105 @@ impl DovewingSource {
     }
 }
 
-pub async fn get_platform_user(
-    pool: &PgPool,
+#[derive(Clone)]
+pub struct Dovewing {
+    pool: PgPool,
     src: DovewingSource,
-    user_id: &str,
-) -> Result<PlatformUser, crate::Error> {
-    // First check cache_http
-    let cached_uid = src.cached_user(user_id)?;
+    middleware: Arc<dyn Fn(PlatformUser) -> Result<PlatformUser, crate::Error> + Send + Sync>,
+}
 
-    if let Some(cached_uid) = cached_uid {
-        // Update internal_user_cache__discord
-        sqlx::query(
-            "INSERT INTO internal_user_cache__discord (id, username, display_name, avatar, bot) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET username = $2, display_name = $3, avatar = $4, bot = $5",
-        )
-        .bind(user_id)
-        .bind(&cached_uid.username)
-        .bind(&cached_uid.display_name)
-        .bind(&cached_uid.avatar)
-        .bind(cached_uid.bot)
-        .execute(pool)
-        .await?;
+impl Dovewing {
+    pub async fn get_platform_user(
+        &self,
+        user_id: &str,
+    ) -> Result<PlatformUser, crate::Error> {
+        // First check cache_http
+        let cached_uid = self.src.cached_user(user_id)?;
 
-        return Ok(cached_uid);
-    }
+        if let Some(cached_uid) = cached_uid {
+            let cached_uid = (self.middleware)(cached_uid)?;
+            // Update internal_user_cache__discord
+            sqlx::query(
+                "INSERT INTO internal_user_cache__discord (id, username, display_name, avatar, bot) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET username = $2, display_name = $3, avatar = $4, bot = $5",
+            )
+            .bind(user_id)
+            .bind(&cached_uid.username)
+            .bind(&cached_uid.display_name)
+            .bind(&cached_uid.avatar)
+            .bind(cached_uid.bot)
+            .execute(&self.pool)
+            .await?;
 
-    // Then check internal_user_cache__discord
-    #[derive(sqlx::FromRow)]
-    pub struct UserCacheRecord {
-        username: String,
-        display_name: String,
-        avatar: String,
-        bot: bool,
-        last_updated: DateTime<Utc>,
-    }
-
-    let rec: Option<UserCacheRecord> = sqlx::query_as("SELECT username, display_name, avatar, bot, last_updated FROM internal_user_cache__discord WHERE id = $1")
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
-
-    if let Some(rec) = rec {
-        if rec.last_updated.timestamp() + src.user_expiry_time() < chrono::Utc::now().timestamp() {
-            // Make a tokio task to update the cache
-            let pool = pool.clone();
-            let src = src.clone();
-            let user_id = user_id.to_string();
-
-            tokio::spawn(async move {
-                let user = src.http_user(&user_id).await?;
-
-                sqlx::query(
-                    "UPDATE internal_user_cache__discord SET username = $1, display_name = $2, avatar = $3, bot = $4, last_updated = NOW() WHERE id = $5"
-                )
-                .bind(&user.username)
-                .bind(&user.display_name)
-                .bind(&user.avatar)
-                .bind(user.bot)
-                .bind(&user_id)
-                .execute(&pool)
-                .await?;
-
-                Ok::<(), crate::Error>(())
-            });
+            return Ok(cached_uid)
         }
 
-        Ok(PlatformUser {
-            id: user_id.to_string(),
-            username: rec.username,
-            display_name: rec.display_name,
-            bot: rec.bot,
-            avatar: rec.avatar,
-            status: "offline".to_string(),
-        })
-    } else {
-        // Fetch from http
-        let user = src.http_user(user_id).await?;
+        // Then check internal_user_cache__discord
+        #[derive(sqlx::FromRow)]
+        pub struct UserCacheRecord {
+            username: String,
+            display_name: String,
+            avatar: String,
+            bot: bool,
+            last_updated: DateTime<Utc>,
+        }
 
-        sqlx::query(
-            "INSERT INTO internal_user_cache__discord (id, username, display_name, avatar, bot) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET username = $2, display_name = $3, avatar = $4, bot = $5",
-        )
+        let rec: Option<UserCacheRecord> = sqlx::query_as("SELECT username, display_name, avatar, bot, last_updated FROM internal_user_cache__discord WHERE id = $1")
         .bind(user_id)
-        .bind(&user.username)
-        .bind(&user.display_name)
-        .bind(&user.avatar)
-        .bind(user.bot)
-        .execute(pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(user)
+        if let Some(rec) = rec {
+            if rec.last_updated.timestamp() + self.src.user_expiry_time() < chrono::Utc::now().timestamp() {
+                // Make a tokio task to update the cache
+                let self_ref = self.clone();
+                let user_id = user_id.to_string();
+
+                tokio::spawn(async move {
+                    let user = self_ref.src.http_user(&user_id).await?;
+                    let user = (self_ref.middleware)(user)?;
+
+                    sqlx::query(
+                        "UPDATE internal_user_cache__discord SET username = $1, display_name = $2, avatar = $3, bot = $4, last_updated = NOW() WHERE id = $5"
+                    )
+                    .bind(&user.username)
+                    .bind(&user.display_name)
+                    .bind(&user.avatar)
+                    .bind(user.bot)
+                    .bind(&user_id)
+                    .execute(&self_ref.pool)
+                    .await?;
+
+                    Ok::<(), crate::Error>(())
+                });
+            }
+
+            let pu = PlatformUser {
+                id: user_id.to_string(),
+                username: rec.username,
+                display_name: rec.display_name,
+                bot: rec.bot,
+                avatar: rec.avatar,
+                status: "offline".to_string(),
+            };
+
+            (self.middleware)(pu)
+        } else {
+            // Fetch from http
+            let user = self.src.http_user(user_id).await?;
+            let user = (self.middleware)(user)?;
+
+            sqlx::query(
+                "INSERT INTO internal_user_cache__discord (id, username, display_name, avatar, bot) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET username = $2, display_name = $3, avatar = $4, bot = $5",
+            )
+            .bind(user_id)
+            .bind(&user.username)
+            .bind(&user.display_name)
+            .bind(&user.avatar)
+            .bind(user.bot)
+            .execute(&self.pool)
+            .await?;
+
+            Ok(user)
+        }
     }
 }
