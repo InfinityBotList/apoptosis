@@ -70,6 +70,7 @@ impl Hooks for SchedulerHook {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Vm {
     /// The lua vm itself
     pub(super) lua: Rc<RefCell<Option<Lua>>>,
@@ -109,6 +110,7 @@ pub struct Vm {
     opts: RuntimeCreateOpts,
 }
 
+#[allow(dead_code)]
 impl Vm {
     pub async fn new<
         FS: mluau_require::vfs::FileSystem + 'static,

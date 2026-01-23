@@ -1,4 +1,4 @@
-use crate::entity::{Entity, EntityFlags, EntityInfo, EntityVoteInfo};
+use crate::entity::{Entity, EntityFlags, EntityInfo};
 
 #[derive(Debug)]
 pub struct Dummy {}
@@ -19,6 +19,10 @@ impl Entity for Dummy {
         "Dummy"
     }
 
+    fn target_type(&self) -> &'static str {
+        "dummy"
+    }
+
     fn cdn_folder(&self) -> &'static str {
         "dummys"
     }
@@ -28,10 +32,6 @@ impl Entity for Dummy {
     }
 
     async fn get_info(&self, _id: &str) -> Result<Option<EntityInfo>, crate::Error> {
-        Ok(None)
-    }
-
-    async fn get_vote_info(&self, _id: &str, _user_id: Option<&str>) -> Result<Option<EntityVoteInfo>, crate::Error> {
         Ok(None)
     }
 

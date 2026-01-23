@@ -18,6 +18,9 @@ log = "0.4.29"
 indexmap = "2.12.1"
 env_logger = "0.11.8"
 uuid = { version = "1", features = ["v4", "serde"] }
+futures = "0.3.31"
+diesel = { version = "2", features = ["postgres", "chrono", "uuid", "serde_json"] }
+diesel-async = { version = "0.7", features = ["pool", "postgres", "tokio", "tokio-postgres", "async-connection-wrapper", "bb8"]}
 
 # luacore/discord deps
 regex = "1"

@@ -6,10 +6,12 @@ pub(crate) mod service;
 pub mod entity;
 pub mod types;
 mod layers;
+mod migrations;
 pub mod utils;
 pub mod config;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Db = diesel_async::pooled_connection::bb8::Pool<diesel_async::AsyncPgConnection>;
 
 #[derive(serde::Deserialize)]
 struct BaseConfig {

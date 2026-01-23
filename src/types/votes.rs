@@ -1,8 +1,11 @@
 use chrono::{DateTime, Utc};
+use diesel::{pg::Pg, prelude::{Queryable, QueryableByName}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::entity::manager::entity_votes;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Queryable, QueryableByName)]
+#[diesel(check_for_backend(Pg))]
 /// Represents a vote on an entity.
 pub struct EntityVote {
     /// The internal ID of the entity.
@@ -12,7 +15,7 @@ pub struct EntityVote {
     /// The ID of the entity that was voted on
     pub target_id: String,
     /// The ID of the user who voted
-    pub author_id: String,
+    pub author: String,
     /// Whether or not the vote was an upvote
     pub upvote: bool,
     /// Whether or not the vote was voided

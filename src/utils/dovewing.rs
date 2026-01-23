@@ -90,7 +90,7 @@ impl DovewingSource {
 
                 Ok(PlatformUser {
                     id: user_id.to_string(),
-                    username: user.name.clone().to_string(),
+                    username: user.name.to_string(),
                     display_name: {
                         if let Some(ref display_name) = user.global_name {
                             display_name.clone()

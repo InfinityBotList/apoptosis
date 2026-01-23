@@ -55,6 +55,9 @@ pub trait Entity {
     /// Returns the name of the entity type.
     fn name(&self) -> &'static str;
 
+    /// Returns the target type of the entity.
+    fn target_type(&self) -> &'static str;
+
     /// Returns the CDN folder to use when saving assets for this entity type.
     fn cdn_folder(&self) -> &'static str;
 
@@ -71,7 +74,12 @@ pub trait Entity {
     /// If user id is specified, then in the future special perks for the user will be returned as well
     ///
     /// If vote time is negative, then it is not possible to revote
-    async fn get_vote_info(&self, id: &str, _user_id: Option<&str>) -> Result<Option<EntityVoteInfo>, crate::Error>;
+    async fn get_vote_info(&self, _id: &str, _user_id: Option<&str>) -> Result<EntityVoteInfo, crate::Error> {
+        Ok(EntityVoteInfo {
+            per_user: 1, // 1 vote per user
+            vote_time: 12 // per day
+        })
+    }
 
     /// Any entity specific post-vote actions
     async fn post_vote(&self, _id: &str, _user_id: &str) {}
@@ -142,6 +150,12 @@ macro_rules! entity_enum {
                 }
             }
 
+            fn target_type(&self) -> &'static str {
+                match self {
+                    $( Self::$name(e) => e.target_type(), )*
+                }
+            }
+
             fn cdn_folder(&self) -> &'static str {
                 match self {
                     $( Self::$name(e) => e.cdn_folder(), )*
@@ -160,7 +174,7 @@ macro_rules! entity_enum {
                 }
             }
 
-            async fn get_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<Option<EntityVoteInfo>, crate::Error> {
+            async fn get_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<EntityVoteInfo, crate::Error> {
                 match self {
                     $( Self::$name(e) => e.get_vote_info(id, user_id).await, )*
                 }
