@@ -1,4 +1,4 @@
-use crate::{Db, entity::Entity, types::votes::{EntityVote, UserVote}};
+use crate::{Db, entity::{Entity, EntityFlags}, types::votes::{EntityVote, UserVote, VoteInfo}};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
 
@@ -82,58 +82,59 @@ impl<E: Entity> EntityManager<E> {
 		Ok(results)
 	}
 
+	/// Helper method to get full vote info for an entity, wrapping the underlying entity's get_vote_info method and adding flag info.
+	pub async fn get_full_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<VoteInfo, crate::Error> {
+		let vi = self.entity.get_vote_info(id, user_id).await?;
+
+			Ok(VoteInfo {
+				per_user: vi.per_user,
+				vote_time: vi.vote_time as u16,
+				vote_credits: self.entity.flags().contains(EntityFlags::SUPPORTS_VOTE_CREDITS),
+				multiple_votes: self.entity.flags().contains(EntityFlags::SUPPORTS_MULTIPLE_VOTES),
+				supports_upvotes: self.entity.flags().contains(EntityFlags::SUPPORTS_UPVOTES),
+				supports_downvotes: self.entity.flags().contains(EntityFlags::SUPPORTS_DOWNVOTES),
+			})
+	}
+
     /// Checks whether or not a user has voted for an entity
     pub async fn vote_check(&self, id: &str, user_id: &str) -> Result<UserVote, crate::Error> {
-		let vi = self.entity.get_vote_info(id, Some(user_id)).await?;
+		let vi = self.get_full_vote_info(id, Some(user_id)).await?;
 		let valid_votes = self.fetch_votes(user_id, id, true, None).await?;
 
-		//let mut vw = None;
+		let mut vote_wait = None;
 		// If there is a valid vote in this period and the entity supports multiple votes, figure out how long the user has to wait
 		let mut has_voted = false;
 
-		todo!()
+		// Case 1: Multiple votes
+		if vi.multiple_votes {
+			if let Some(last_vote) = valid_votes.iter().next() {
+				// Check if the user has voted in the last vote time
+				has_voted = last_vote.created_at + chrono::Duration::hours(vi.vote_time as i64) > chrono::Utc::now();
 
-        /*
-	var vw *types.VoteWait
+				if has_voted {
+					let time_elapsed = chrono::Utc::now() - last_vote.created_at;
+					let time_to_wait = chrono::Duration::hours(vi.vote_time as i64) - time_elapsed;
+					let hours = time_to_wait.num_hours();
+					let minutes = time_to_wait.num_minutes() - (hours * 60);
+					let seconds = time_to_wait.num_seconds() - (hours * 3600 + minutes * 60);
 
-	// If there is a valid vote in this period and the entity supports multiple votes, figure out how long the user has to wait
-	var hasVoted bool
-
-	// Case 1: Multiple votes
-	if vi.MultipleVotes {
-		if len(validVotes) > 0 {
-			// Check if the user has voted in the last vote time
-			hasVoted = validVotes[0].CreatedAt.Add(time.Duration(vi.VoteTime) * time.Hour).After(time.Now())
-
-			if hasVoted {
-				timeElapsed := time.Since(validVotes[0].CreatedAt)
-
-				timeToWait := int64(vi.VoteTime)*60*60*1000 - timeElapsed.Milliseconds()
-
-				timeToWaitTime := (time.Duration(timeToWait) * time.Millisecond)
-
-				hours := timeToWaitTime / time.Hour
-				mins := (timeToWaitTime - (hours * time.Hour)) / time.Minute
-				secs := (timeToWaitTime - (hours*time.Hour + mins*time.Minute)) / time.Second
-
-				vw = &types.VoteWait{
-					Hours:   int(hours),
-					Minutes: int(mins),
-					Seconds: int(secs),
+					vote_wait = Some(crate::types::votes::VoteWait {
+						hours: hours as i32,
+						minutes: minutes as i32,
+						seconds: seconds as i32,
+					});
 				}
 			}
+		} else {
+			// Case 2: Single vote entity
+			has_voted = !valid_votes.is_empty();
 		}
-	} else {
-		// Case 2: Single vote entity
-		hasVoted = len(validVotes) > 0
-	}
 
-	return &types.UserVote{
-		HasVoted:   hasVoted,
-		ValidVotes: validVotes,
-		VoteInfo:   vi,
-		Wait:       vw,
-	}, nil
-         */
+		Ok(UserVote {
+			has_voted,
+			valid_votes,
+			vote_info: vi,
+			wait: vote_wait,
+		})
     }
 }

@@ -1,10 +1,8 @@
 use chrono::{DateTime, Utc};
-use diesel::{pg::Pg, prelude::{Queryable, QueryableByName}};
+use diesel::{pg::Pg, prelude::Queryable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::entity::manager::entity_votes;
-
-#[derive(Debug, Serialize, Deserialize, Queryable, QueryableByName)]
+#[derive(Debug, Serialize, Deserialize, Queryable)]
 #[diesel(check_for_backend(Pg))]
 /// Represents a vote on an entity.
 pub struct EntityVote {
