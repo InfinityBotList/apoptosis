@@ -174,9 +174,7 @@ impl<E: Entity> EntityManager<E> {
 		
 		let mut tx = self.pool.begin().await?;
 
-		/// Keep adding votes until, but not including vote_info.per_user
-		///
-		/// Error if vote_wait is required but not satisfied
+		// Keep adding votes until, but not including vote_info.per_user
 		for i in 0..vi.per_user {
 			sqlx::query(
 				"INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5)",
