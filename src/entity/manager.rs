@@ -1,6 +1,7 @@
 use crate::{Db, entity::{Entity, EntityFlags}, types::votes::{EntityVote, UserVote, VoteInfo}};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
+use sqlx::PgPool;
 
 diesel::table! {
     entity_votes (itag) {
@@ -21,13 +22,14 @@ diesel::table! {
 
 pub struct EntityManager<E: Entity> {
     db: Db,
+	pool: PgPool,
     entity: E
 }
 
 impl<E: Entity> EntityManager<E> {
     /// Creates a new entity manager instance.
-    pub fn new(entity: E, db: Db) -> Self {
-        Self { db, entity }
+    pub fn new(entity: E, db: Db, pool: PgPool) -> Self {
+        Self { pool, db, entity }
     }
 
     /// Returns a reference to the entity instance.
@@ -137,4 +139,60 @@ impl<E: Entity> EntityManager<E> {
 			wait: vote_wait,
 		})
     }
+
+	/// Returns the exact (non-cached/approximate) vote count for an entity
+	pub async fn exact_vote_count(&self, id: &str, user_id: &str) -> Result<i64, crate::Error> {
+		#[derive(sqlx::FromRow)]
+		struct VoteCount {
+			count: i64,
+		}
+
+		let upvotes: VoteCount = sqlx::query_as::<_, VoteCount>(
+			"SELECT COUNT(*) FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND upvote = true"
+		)
+		.bind(id)
+		.bind(self.entity.target_type())
+		.bind(user_id)
+		.fetch_one(&self.pool)
+		.await?;
+
+		let downvotes: VoteCount = sqlx::query_as::<_, VoteCount>(
+			"SELECT COUNT(*) FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND upvote = false"
+		)
+		.bind(id)
+		.bind(self.entity.target_type())
+		.bind(user_id)
+		.fetch_one(&self.pool)
+		.await?;
+
+		Ok(upvotes.count - downvotes.count)
+	}
+
+	/// Helper function to give votes to an entity 
+	 pub async fn give_votes(&self, id: &str, user_id: &str, upvote: bool) -> Result<(), crate::Error> {
+		let vi = self.get_full_vote_info(id, Some(user_id)).await?;
+		
+		let mut tx = self.pool.begin().await?;
+
+		// Keep adding votes until, but not including vote_info.per_user
+		for i in 0..vi.per_user {
+			sqlx::query(
+				"INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5)",
+			)
+			.bind(user_id)
+			.bind(id)
+			.bind(self.entity.target_type())
+			.bind(upvote)
+			.bind(i as i32)
+			.execute(&mut *tx)
+			.await?;
+		}
+
+		// Perform any post-vote actions
+		self.entity.post_vote(&mut *tx, id, user_id).await?;
+
+		tx.commit().await?;
+
+		Ok(())
+	 }
 }

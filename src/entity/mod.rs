@@ -82,7 +82,9 @@ pub trait Entity {
     }
 
     /// Any entity specific post-vote actions
-    async fn post_vote(&self, _id: &str, _user_id: &str) {}
+    async fn post_vote<'a, D: sqlx::PgExecutor<'a>>(&self, _conn: D, _id: &str, _user_id: &str) -> Result<(), crate::Error> {
+        Ok(())
+    }
 
     /// Fetches the full object for the entity
     async fn get_full(&self, id: &str) -> Result<Self::FullObject, crate::Error>;
@@ -180,9 +182,9 @@ macro_rules! entity_enum {
                 }
             }
 
-            async fn post_vote(&self, id: &str, user_id: &str) {
+            async fn post_vote<'a, D: sqlx::PgExecutor<'a>>(&self, conn: D, id: &str, user_id: &str) -> Result<(), crate::Error> {
                 match self {
-                    $( Self::$name(e) => e.post_vote(id, user_id).await, )*
+                    $( Self::$name(e) => e.post_vote(conn, id, user_id).await, )*
                 }
             }
 
