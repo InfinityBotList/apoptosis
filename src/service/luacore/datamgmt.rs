@@ -34,11 +34,6 @@ impl TarArchive {
         self.entries.remove(&BString::from(name))
     }
 
-    /// Given a Blob, attempts to read it as a tar archive
-    pub fn from_blob(blob: Blob) -> LuaResult<Self> {
-        Self::from_array(blob.data)
-    }
-
     pub fn from_array(arr: Vec<u8>) -> LuaResult<Self> {
         let mut entries = HashMap::new();
         let mut archive = tar::Archive::new(arr.as_slice());
@@ -241,23 +236,4 @@ pub fn datamgmt_tab(lua: &Lua) -> LuaResult<LuaTable> {
     module.set_readonly(true); // Block any attempt to modify this table
 
     Ok(module)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tar_archive() {
-        let mut archive = TarArchive::new();
-        archive.entries.insert(
-            BString::from("foo/test.txt"),
-            Blob {
-                data: b"Hello, world!".to_vec(),
-            },
-        );
-        let blob = archive.to_blob().unwrap();
-        let mut tar_archive = TarArchive::from_blob(blob).expect("Failed to read tar archive");
-        assert_eq!(tar_archive.take_entry("foo/test.txt").unwrap().data, b"Hello, world!".as_bytes());
-    }
 }

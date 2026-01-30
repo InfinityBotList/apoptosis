@@ -1,6 +1,6 @@
 use crate::entity::{Entity, EntityFlags, EntityInfo};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Dummy {}
 
 impl Dummy {

@@ -169,7 +169,7 @@ impl<E: Entity> EntityManager<E> {
 	}
 
 	/// Helper function to give votes to an entity 
-	 pub async fn give_votes(&self, id: &str, user_id: &str, upvote: bool) -> Result<(), crate::Error> {
+	pub async fn give_votes(&self, id: &str, user_id: &str, upvote: bool) -> Result<(), crate::Error> {
 		let vi = self.get_full_vote_info(id, Some(user_id)).await?;
 		
 		let mut tx = self.pool.begin().await?;
@@ -188,8 +188,16 @@ impl<E: Entity> EntityManager<E> {
 			.await?;
 		}
 
-		// Perform any post-vote actions
-		self.entity.post_vote(&mut *tx, id, user_id).await?;
+		// Update entity_approx_votes table
+		sqlx::query(
+			"INSERT INTO entity_approx_votes (target_id, target_type, approximate_votes) VALUES ($1, $2, $3)
+			ON CONFLICT (target_id, target_type) DO UPDATE SET approximate_votes = entity_approx_votes.approximate_votes + EXCLUDED.approximate_votes",
+		)
+		.bind(id)
+		.bind(self.entity.target_type())
+		.bind(if upvote { vi.per_user as i64 } else { -(vi.per_user as i64) })
+		.execute(&mut *tx)
+		.await?;
 
 		tx.commit().await?;
 

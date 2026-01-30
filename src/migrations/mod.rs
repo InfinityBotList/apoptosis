@@ -1,4 +1,5 @@
 mod add_pkeys;
+mod add_entity_approx_votes;
 
 use futures::future::BoxFuture;
 use log::info;
@@ -10,8 +11,9 @@ pub struct Migration {
     pub up: fn(sqlx::Pool<sqlx::Postgres>) -> BoxFuture<'static, Result<(), crate::Error>>,
 }
 
-pub const MIGRATIONS: [Migration; 1] = [
+pub const MIGRATIONS: [Migration; 2] = [
     add_pkeys::MIGRATION,
+    add_entity_approx_votes::MIGRATION,
 ];
 
 pub async fn apply_migrations(pool: sqlx::PgPool) -> Result<(), crate::Error> {

@@ -1,5 +1,6 @@
 pub mod entities;
 pub mod manager;
+pub mod lua;
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ pub struct EntityVoteInfo {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait Entity {
+pub trait Entity: 'static + Send + Sync + Clone {
     /// The full object type for the entity
     type FullObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
     /// The public object type for the entity
@@ -81,11 +82,6 @@ pub trait Entity {
         })
     }
 
-    /// Any entity specific post-vote actions
-    async fn post_vote<'a, D: sqlx::PgExecutor<'a>>(&self, _conn: D, _id: &str, _user_id: &str) -> Result<(), crate::Error> {
-        Ok(())
-    }
-
     /// Fetches the full object for the entity
     async fn get_full(&self, id: &str) -> Result<Self::FullObject, crate::Error>;
 
@@ -109,7 +105,7 @@ macro_rules! entity_enum {
         #[allow(dead_code)]
         pub type AnyEntityManager = crate::entity::manager::EntityManager<EntityType>;
 
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         pub enum EntityType {
             $( $name( $entity_type ), )*
         }
@@ -179,12 +175,6 @@ macro_rules! entity_enum {
             async fn get_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<EntityVoteInfo, crate::Error> {
                 match self {
                     $( Self::$name(e) => e.get_vote_info(id, user_id).await, )*
-                }
-            }
-
-            async fn post_vote<'a, D: sqlx::PgExecutor<'a>>(&self, conn: D, id: &str, user_id: &str) -> Result<(), crate::Error> {
-                match self {
-                    $( Self::$name(e) => e.post_vote(conn, id, user_id).await, )*
                 }
             }
 
