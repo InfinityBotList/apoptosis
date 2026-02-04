@@ -125,9 +125,9 @@ impl<T: Entity> LuaUserData for LuaEntity<T> {
             Ok(this.0.cdn_folder().to_string())
         });
 
-        methods.add_method("Flags", |_, this, ()| {
+        methods.add_scheduler_async_method("Flags", async |_, this, id: String| {
             let mut flags = Vec::new();
-            let fset = this.0.flags();
+            let fset = this.0.flags(&id).await.map_err(|e| LuaError::external(e.to_string()))?;
             for flag in EntityFlags::FLAGS {
                 if fset.contains(*flag.value()) {
                     flags.push(flag.name().to_string());

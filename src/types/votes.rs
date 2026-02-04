@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
-use diesel::{pg::Pg, prelude::Queryable};
+use diesel::prelude::Queryable;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
 #[derive(Debug, Serialize, Deserialize, Queryable)]
 #[diesel(check_for_backend(Pg))]
 /// Represents a vote on an entity.

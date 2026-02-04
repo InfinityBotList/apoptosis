@@ -48,7 +48,7 @@ impl Layer for SampleLayer {
     }
 
     async fn new(opts: NewLayerOpts<Self>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let shared = SharedLayer::new(opts.pool);
+        let shared = SharedLayer::new(opts.pool, opts.diesel);
         let vm = Self::setup_vm(RuntimeCreateOpts::default(), get_luau_vfs(), None).await?;
 
         let layer_data = Self::create_layer_data(SharedLayerData {

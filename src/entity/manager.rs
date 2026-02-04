@@ -1,7 +1,6 @@
-use crate::{Db, entity::{Entity, EntityFlags}, types::votes::{EntityVote, UserVote, VoteInfo}};
+use crate::{entity::{Entity, EntityFlags}, types::votes::{EntityVote, UserVote, VoteInfo}};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
-use sqlx::PgPool;
 
 diesel::table! {
     entity_votes (itag) {
@@ -21,15 +20,13 @@ diesel::table! {
 }
 
 pub struct EntityManager<E: Entity> {
-    db: Db,
-	pool: PgPool,
     entity: E
 }
 
 impl<E: Entity> EntityManager<E> {
     /// Creates a new entity manager instance.
-    pub fn new(entity: E, db: Db, pool: PgPool) -> Self {
-        Self { pool, db, entity }
+    pub fn new(entity: E) -> Self {
+        Self { entity }
     }
 
     /// Returns a reference to the entity instance.
@@ -79,7 +76,7 @@ impl<E: Entity> EntityManager<E> {
 
 		base_query_dyn = base_query_dyn.order(entity_votes::created_at.desc());
 
-		let mut conn = self.db.get().await?;
+		let mut conn = self.entity().diesel().get().await?;
 		let results = base_query_dyn.load::<EntityVote>(&mut conn).await?;
 		Ok(results)
 	}
@@ -87,15 +84,16 @@ impl<E: Entity> EntityManager<E> {
 	/// Helper method to get full vote info for an entity, wrapping the underlying entity's get_vote_info method and adding flag info.
 	pub async fn get_full_vote_info(&self, id: &str, user_id: Option<&str>) -> Result<VoteInfo, crate::Error> {
 		let vi = self.entity.get_vote_info(id, user_id).await?;
+		let flags = self.entity.flags(id).await?;
 
-			Ok(VoteInfo {
-				per_user: vi.per_user,
-				vote_time: vi.vote_time as u16,
-				vote_credits: self.entity.flags().contains(EntityFlags::SUPPORTS_VOTE_CREDITS),
-				multiple_votes: self.entity.flags().contains(EntityFlags::SUPPORTS_MULTIPLE_VOTES),
-				supports_upvotes: self.entity.flags().contains(EntityFlags::SUPPORTS_UPVOTES),
-				supports_downvotes: self.entity.flags().contains(EntityFlags::SUPPORTS_DOWNVOTES),
-			})
+		Ok(VoteInfo {
+			per_user: vi.per_user,
+			vote_time: vi.vote_time as u16,
+			vote_credits: flags.contains(EntityFlags::SUPPORTS_VOTE_CREDITS),
+			multiple_votes: flags.contains(EntityFlags::SUPPORTS_MULTIPLE_VOTES),
+			supports_upvotes: flags.contains(EntityFlags::SUPPORTS_UPVOTES),
+			supports_downvotes: flags.contains(EntityFlags::SUPPORTS_DOWNVOTES),
+		})
 	}
 
     /// Checks whether or not a user has voted for an entity
@@ -153,7 +151,7 @@ impl<E: Entity> EntityManager<E> {
 		.bind(id)
 		.bind(self.entity.target_type())
 		.bind(user_id)
-		.fetch_one(&self.pool)
+		.fetch_one(self.entity.pool())
 		.await?;
 
 		let downvotes: VoteCount = sqlx::query_as::<_, VoteCount>(
@@ -162,7 +160,7 @@ impl<E: Entity> EntityManager<E> {
 		.bind(id)
 		.bind(self.entity.target_type())
 		.bind(user_id)
-		.fetch_one(&self.pool)
+		.fetch_one(self.entity.pool())
 		.await?;
 
 		Ok(upvotes.count - downvotes.count)
@@ -172,7 +170,7 @@ impl<E: Entity> EntityManager<E> {
 	pub async fn give_votes(&self, id: &str, user_id: &str, upvote: bool) -> Result<(), crate::Error> {
 		let vi = self.get_full_vote_info(id, Some(user_id)).await?;
 		
-		let mut tx = self.pool.begin().await?;
+		let mut tx = self.entity.pool().begin().await?;
 
 		// Keep adding votes until, but not including vote_info.per_user
 		for i in 0..vi.per_user {
@@ -202,5 +200,5 @@ impl<E: Entity> EntityManager<E> {
 		tx.commit().await?;
 
 		Ok(())
-	 }
+	}
 }

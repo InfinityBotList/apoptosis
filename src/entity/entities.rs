@@ -1,12 +1,15 @@
 use crate::entity::{Entity, EntityFlags, EntityInfo};
 
 #[derive(Debug, Clone)]
-pub struct Dummy {}
+pub struct Dummy {
+    pool: sqlx::PgPool,
+    diesel: crate::Db,
+}
 
 impl Dummy {
     /// Creates a new instance of the Dummy entity.
-    pub fn new(_pool: sqlx::PgPool) -> Self {
-        Self {}
+    pub fn new(pool: sqlx::PgPool, diesel: crate::Db) -> Self {
+        Self { pool, diesel }
     }
 }
 
@@ -14,6 +17,14 @@ impl Entity for Dummy {
     type FullObject = ();
     type PublicObject = ();
     type SummaryObject = ();
+
+    fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+
+    fn diesel(&self) -> &crate::Db {
+        &self.diesel
+    }
 
     fn name(&self) -> &'static str {
         "Dummy"
@@ -27,8 +38,8 @@ impl Entity for Dummy {
         "dummys"
     }
 
-    fn flags(&self) -> EntityFlags {
-        EntityFlags::empty()
+    async fn flags(&self, _id: &str) -> Result<EntityFlags, crate::Error> {
+        Ok(EntityFlags::empty())
     }
 
     async fn get_info(&self, _id: &str) -> Result<Option<EntityInfo>, crate::Error> {

@@ -21,6 +21,8 @@ bitflags! {
         const SUPPORTS_DOWNVOTES = 1 << 4;
         /// Whether or not the entity supports vote credits
         const SUPPORTS_VOTE_CREDITS = 1 << 5;
+        /// Whether or not this entity has been banned
+        const BANNED = 1 << 6;
     }
 }
 
@@ -53,6 +55,12 @@ pub trait Entity: 'static + Send + Sync + Clone {
     /// The summary (short form) object type for the entity
     type SummaryObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
 
+    /// Returns the underlying pool used by this entity
+    fn pool(&self) -> &sqlx::PgPool;
+
+    /// Returns the underlying diesel connection used by this entity
+    fn diesel(&self) -> &crate::Db;
+
     /// Returns the name of the entity type.
     fn name(&self) -> &'static str;
 
@@ -62,9 +70,9 @@ pub trait Entity: 'static + Send + Sync + Clone {
     /// Returns the CDN folder to use when saving assets for this entity type.
     fn cdn_folder(&self) -> &'static str;
 
-    /// Returns the base flags for the entity type.
-    fn flags(&self) -> EntityFlags {
-        EntityFlags::NONE
+    /// Returns the flags for the given ID.
+    async fn flags(&self, _id: &str) -> Result<EntityFlags, crate::Error> {
+        Ok(EntityFlags::NONE)
     }
 
     /// Fetches the entity information for the given ID.
@@ -112,9 +120,9 @@ macro_rules! entity_enum {
         #[allow(unused_variables)]
         impl EntityType {
             /// Creates a new entity type from the given name.
-            pub fn from_name(name: &str, pool: sqlx::PgPool) -> Option<Self> {
+            pub fn from_name(name: &str, pool: sqlx::PgPool, diesel: crate::Db) -> Option<Self> {
                 match name {
-                    $( $matcher => Some(Self::$name(<$entity_type>::new(pool))), )*
+                    $( $matcher => Some(Self::$name(<$entity_type>::new(pool, diesel))), )*
                     _ => None,
                 }
             }
@@ -142,6 +150,18 @@ macro_rules! entity_enum {
             type PublicObject = EntityEnumPublicObject;
             type SummaryObject = EntityEnumSummaryObject;
 
+            fn pool(&self) -> &sqlx::PgPool {
+                match self {
+                    $( Self::$name(e) => e.pool(), )*
+                }
+            }
+
+            fn diesel(&self) -> &crate::Db {
+                match self {
+                    $( Self::$name(e) => e.diesel(), )*
+                }
+            }
+
             fn name(&self) -> &'static str {
                 match self {
                     $( Self::$name(n) => n.name(), )*
@@ -160,9 +180,9 @@ macro_rules! entity_enum {
                 }
             }
 
-            fn flags(&self) -> EntityFlags {
+            async fn flags(&self, id: &str) -> Result<EntityFlags, crate::Error> {
                 match self {
-                    $( Self::$name(e) => e.flags(), )*
+                    $( Self::$name(e) => e.flags(id).await, )*
                 }
             }
 

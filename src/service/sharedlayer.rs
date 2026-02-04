@@ -1,3 +1,8 @@
+use crate::Db;
+use crate::entity::EntityType;
+use crate::entity::manager::EntityManager;
+use crate::types::auth::Session;
+
 use super::cacheserver::CacheServerManager;
 use super::kittycat as srv_kittycat;
 use super::optional_value::OptionalValue;
@@ -14,6 +19,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct SharedLayer {
     pool: sqlx::PgPool,
+    diesel: Db,
     cache_server_manager: CacheServerManager,
 
     // Cache any computed fields here
@@ -26,10 +32,11 @@ impl SharedLayer {
     ///
     /// Should be called once per layer
     #[allow(dead_code)]
-    pub fn new(pool: sqlx::PgPool) -> Self {
+    pub fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
         Self {
             cache_server_manager: CacheServerManager::new(pool.clone()),
             pool,
+            diesel,
             cache_server_manager_cache: OptionalValue::new().into(),
             shared_layer_ud: OptionalValue::new().into(),
         }
@@ -106,6 +113,35 @@ impl SharedLayer {
 
         Ok(sp)
     }
+
+    /// Fetches the session of a entity given token
+    pub async fn get_session_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<Session>, sqlx::Error> {
+        // Delete old/expiring auths first
+        sqlx::query("DELETE FROM api_sessions WHERE expiry < NOW()")
+            .execute(&self.pool)
+            .await?;
+
+        let session: Option<Session> = sqlx::query_as(
+            "SELECT id, name, created_at, type AS session_type, target_type, target_id, expiry 
+             FROM api_sessions WHERE token = $1 AND expiry >= NOW()",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(session)
+    }
+
+    /// Creates a new EntityManager for the given entity type
+    pub fn entity_manager_for(&self, target_type: &str) -> Option<crate::entity::AnyEntityManager> {
+        let Some(manager) = EntityType::from_name(target_type, self.pool.clone(), self.diesel.clone()) else {
+            return None;
+        };
+        Some(EntityManager::new(manager))
+    }
 }
 
 impl LuaUserData for SharedLayer {
@@ -136,5 +172,16 @@ impl LuaUserData for SharedLayer {
                 .map_err(LuaError::external)?;
             Ok(state)
         });
+
+        methods.add_scheduler_async_method(
+            "GetSessionByToken",
+            |lua, this, token: String| async move {
+                let session = this
+                    .get_session_by_token(&token)
+                    .await
+                    .map_err(LuaError::external)?;
+                lua.to_value(&session)
+            },
+        );
     }
 }
