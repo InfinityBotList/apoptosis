@@ -1,5 +1,6 @@
 mod add_pkeys;
 mod add_entity_approx_votes;
+mod add_known_entities;
 
 use futures::future::BoxFuture;
 use log::info;

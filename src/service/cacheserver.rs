@@ -37,21 +37,9 @@ impl IntoLua for CacheServerInfo {
 
 impl CacheServerManager {
     /// Creates a new CacheServerManager
-    ///
-    /// Should be called once per service
     #[allow(dead_code)]
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
-    }
-
-    /// Creates a shallow clone of the CacheServerManager
-    ///
-    /// Note that CacheServerManager intentionally does not implement Clone
-    /// to ensure it cannot be called outside of this module
-    pub(super) fn shallow_clone(&self) -> Self {
-        Self {
-            pool: self.pool.clone(),
-        }
     }
 
     /// Returns information about a cache server

@@ -56,9 +56,13 @@ pub trait Entity: 'static + Send + Sync + Clone {
     type SummaryObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
 
     /// Returns the underlying pool used by this entity
+    /// 
+    /// Not exposed to Lua
     fn pool(&self) -> &sqlx::PgPool;
 
     /// Returns the underlying diesel connection used by this entity
+    /// 
+    /// Not exposed to Lua
     fn diesel(&self) -> &crate::Db;
 
     /// Returns the name of the entity type.

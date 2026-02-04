@@ -1,7 +1,7 @@
 use crate::Db;
 use crate::entity::EntityType;
 use crate::entity::manager::EntityManager;
-use crate::types::auth::Session;
+use crate::service::session::SessionManager;
 
 use super::cacheserver::CacheServerManager;
 use super::kittycat as srv_kittycat;
@@ -12,18 +12,51 @@ use sqlx::Row;
 use sqlx::types::Uuid;
 use std::rc::Rc;
 
+/// Internally needed so other parts of SharedLayer can access the database
+/// and entity manager creation related methods
+#[derive(Clone)]
+pub(super) struct SharedLayerDb {
+    pool: sqlx::PgPool,
+    diesel: Db,
+}
+
+impl SharedLayerDb {
+    fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
+        Self { pool, diesel }
+    }
+
+    /// Returns the underlying sqlx Postgres pool
+    pub(super) fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+
+    /// Returns the underlying Diesel database connection
+    pub(super) fn diesel(&self) -> &Db {
+        &self.diesel
+    }
+
+    /// Creates a new EntityManager for the given entity type
+    pub fn entity_manager_for(&self, target_type: &str) -> Option<crate::entity::AnyEntityManager> {
+        let Some(manager) = EntityType::from_name(target_type, self.pool.clone(), self.diesel.clone()) else {
+            return None;
+        };
+        Some(EntityManager::new(manager))
+    }
+}
+
 /// SharedLayer provides common methods across IBL's entire backend
 /// to both
 ///
 /// Ideally, every IBL apoptosis layer will have its own SharedLayer
 #[derive(Clone)]
 pub struct SharedLayer {
-    pool: sqlx::PgPool,
-    diesel: Db,
+    db: SharedLayerDb,
     cache_server_manager: CacheServerManager,
+    session_manager: SessionManager,
 
     // Cache any computed fields here
     cache_server_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
+    session_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
     shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
@@ -33,13 +66,25 @@ impl SharedLayer {
     /// Should be called once per layer
     #[allow(dead_code)]
     pub fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
+        let db = SharedLayerDb::new(pool.clone(), diesel.clone());
         Self {
             cache_server_manager: CacheServerManager::new(pool.clone()),
-            pool,
-            diesel,
+            session_manager: SessionManager::new(db.clone()),
+            db,
             cache_server_manager_cache: OptionalValue::new().into(),
+            session_manager_cache: OptionalValue::new().into(),
             shared_layer_ud: OptionalValue::new().into(),
         }
+    }
+
+    /// Returns the underlying cache server manager
+    pub fn cache_server_manager(&self) -> &CacheServerManager {
+        &self.cache_server_manager
+    }
+
+    /// Returns the underlying session manager
+    pub fn session_manager(&self) -> &SessionManager {
+        &self.session_manager
     }
 
     /// Returns the SharedLayer as LuaUserData
@@ -54,7 +99,7 @@ impl SharedLayer {
     pub async fn get_bot_state(&self, botid: String) -> Result<Option<String>, sqlx::Error> {
         let row = sqlx::query("SELECT type FROM bots WHERE bot_id = $1")
             .bind(botid)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&self.db.pool)
             .await?;
 
         if let Some(row) = row {
@@ -73,7 +118,7 @@ impl SharedLayer {
         let row =
             sqlx::query("SELECT positions, perm_overrides FROM staff_members WHERE user_id = $1")
                 .bind(userid)
-                .fetch_optional(&self.pool)
+                .fetch_optional(&self.db.pool)
                 .await?;
 
         let Some(row) = row else {
@@ -89,7 +134,7 @@ impl SharedLayer {
         let position_data =
             sqlx::query("SELECT id::text, index, perms FROM staff_positions WHERE id = ANY($1)")
                 .bind(&positions)
-                .fetch_all(&self.pool)
+                .fetch_all(&self.db.pool)
                 .await?;
 
         let mut positions = Vec::with_capacity(position_data.len());
@@ -114,33 +159,9 @@ impl SharedLayer {
         Ok(sp)
     }
 
-    /// Fetches the session of a entity given token
-    pub async fn get_session_by_token(
-        &self,
-        token: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        // Delete old/expiring auths first
-        sqlx::query("DELETE FROM api_sessions WHERE expiry < NOW()")
-            .execute(&self.pool)
-            .await?;
-
-        let session: Option<Session> = sqlx::query_as(
-            "SELECT id, name, created_at, type AS session_type, target_type, target_id, expiry 
-             FROM api_sessions WHERE token = $1 AND expiry >= NOW()",
-        )
-        .bind(token)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(session)
-    }
-
     /// Creates a new EntityManager for the given entity type
     pub fn entity_manager_for(&self, target_type: &str) -> Option<crate::entity::AnyEntityManager> {
-        let Some(manager) = EntityType::from_name(target_type, self.pool.clone(), self.diesel.clone()) else {
-            return None;
-        };
-        Some(EntityManager::new(manager))
+        self.db.entity_manager_for(target_type)
     }
 }
 
@@ -148,7 +169,12 @@ impl LuaUserData for SharedLayer {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("CacheServerManager", |lua, this| {
             this.cache_server_manager_cache
-                .get_failable(|| lua.create_any_userdata(this.cache_server_manager.shallow_clone()))
+                .get_failable(|| lua.create_any_userdata(this.cache_server_manager.clone()))
+        });
+
+        fields.add_field_method_get("SessionManager", |lua, this| {
+            this.session_manager_cache
+                .get_failable(|| lua.create_any_userdata(this.session_manager.clone()))
         });
     }
 
@@ -172,16 +198,5 @@ impl LuaUserData for SharedLayer {
                 .map_err(LuaError::external)?;
             Ok(state)
         });
-
-        methods.add_scheduler_async_method(
-            "GetSessionByToken",
-            |lua, this, token: String| async move {
-                let session = this
-                    .get_session_by_token(&token)
-                    .await
-                    .map_err(LuaError::external)?;
-                lua.to_value(&session)
-            },
-        );
     }
 }
