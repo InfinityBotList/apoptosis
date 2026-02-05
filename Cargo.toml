@@ -27,7 +27,7 @@ axum = { version = "0.8.4", features = ["macros", "ws"] }
 tower-http = { version = "0.5.2", features = ["trace", "cors"] }
 
 # openapi
-utoipa = { version = "5", features = ["chrono", "uuid", "indexmap", "axum_extras"] }
+utoipa = { version = "5", features = ["chrono", "uuid", "indexmap", "axum_extras", "macros"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored", "reqwest"] }
 

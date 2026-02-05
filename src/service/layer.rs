@@ -340,6 +340,26 @@ where T: Layer,
 {
     pub cfg: LayerConfig<T>,
     pub shared: SharedLayer,
+    shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
+}
+
+impl<T> SharedLayerData<T> 
+where T: Layer,
+    T::Config: Clone 
+{
+    pub fn new(config: T::Config, shared: SharedLayer) -> Self {
+        Self {
+            cfg: LayerConfig::new(config),
+            shared,
+            shared_layer_ud: Rc::new(OptionalValue::new()),
+        }
+    }
+
+    /// Returns the SharedLayer as LuaUserData
+    pub fn as_lua_userdata(&self, lua: &Lua) -> LuaResult<LuaAnyUserData> {
+        self.shared_layer_ud
+            .get_failable(|| lua.create_userdata(self.clone()))
+    }
 }
 
 impl<T> LuaUserData for SharedLayerData<T> 
@@ -347,7 +367,7 @@ where T: Layer, T::Config: Clone
 {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("sharedlayer", |lua, this| {
-            this.shared.as_lua_userdata(lua)
+            this.as_lua_userdata(lua)
         });
 
         fields.add_field_method_get("config", |lua, this| {

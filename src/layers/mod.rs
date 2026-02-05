@@ -87,10 +87,7 @@ macro_rules! layer_init {
             let shared = SharedLayer::new($opts.pool, $opts.diesel);
             let vm = Self::setup_vm(RuntimeCreateOpts::default(), get_luau_vfs(), None).await?;
 
-            let layer_data = Self::create_layer_data(SharedLayerData {
-                cfg: LayerConfig::new($opts.config),
-                shared,
-            }, &vm)
+            let layer_data = Self::create_layer_data(SharedLayerData::new($opts.config, shared), &vm)
             .map_err(|e| format!("Failed to create layer data: {e}"))?;
 
             Ok(Self {
@@ -130,7 +127,7 @@ macro_rules! layer {
         pub mod $mod {
             use super::{$msg_type, $config_type};
             use std::rc::Rc;
-            use crate::service::{layer::{DispatchLayerResult, Layer, LayerConfig, LayerData, SharedLayerData, NewLayerOpts}, lua::{Vm, RuntimeCreateOpts}, sharedlayer::SharedLayer, vfs::get_luau_vfs};
+            use crate::service::{layer::{DispatchLayerResult, Layer, LayerData, SharedLayerData, NewLayerOpts}, lua::{Vm, RuntimeCreateOpts}, sharedlayer::SharedLayer, vfs::get_luau_vfs};
             
             #[derive(Clone)]
             $(#[$attr])*

@@ -3,11 +3,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use std::sync::Arc;
+//use std::sync::Arc;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::openapi::server::Server;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
+
+use crate::service::sharedlayer::SharedLayer;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub enum ApiErrorCode {
@@ -48,15 +50,12 @@ impl<'a> From<&'a str> for ApiError {
 
 #[derive(Clone)]
 pub struct AppData {
-    pub data: Arc<crate::data::Data>,
-    pub mesophyll_db_state: DbState,
-    pub pool: sqlx::PgPool,
-    pub _http: Arc<serenity::http::Http>,
+    pub shared_layer: SharedLayer,
 }
 
 impl AppData {
-    pub fn new(data: Arc<crate::data::Data>, http: Arc<serenity::http::Http>, pool: sqlx::PgPool, mesophyll_db_state: DbState) -> Self {
-        Self { data, _http: http, pool, mesophyll_db_state }
+    pub fn new(shared_layer: SharedLayer) -> Self {
+        Self { shared_layer }
     }
 }
 
@@ -78,10 +77,7 @@ async fn logger(
 }
 
 pub fn create(
-    data: Arc<crate::data::Data>,
-    mesophyll_db_state: DbState,
-    pool: sqlx::PgPool,
-    http: Arc<serenity::http::Http>,
+    shared: SharedLayer,
 ) -> axum::routing::IntoMakeService<Router> {
     let mut router = Router::new();
 
@@ -134,7 +130,7 @@ pub fn create(
     let mut internal_openapi = oapi_router.into_openapi();
 
     // Set OpenAPI servers so Swagger UI knows the API base URL
-    internal_openapi.servers = Some(vec![Server::new("https://splashtail-staging.antiraid.xyz")]);
+    internal_openapi.servers = Some(vec![Server::new("https://spider-staging.omniplex.gg")]);
 
     // Add InternalAuth
     if let Some(comps) = internal_openapi.components.as_mut() {
@@ -198,6 +194,6 @@ pub fn create(
         .layer(tower_http::cors::CorsLayer::very_permissive())
         .layer(axum::middleware::from_fn(logger));
 
-    let router: Router<()> = router.with_state(AppData::new(data, http, pool, mesophyll_db_state));
+    let router: Router<()> = router.with_state(AppData::new(shared));
     router.into_make_service()
 }
