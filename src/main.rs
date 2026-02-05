@@ -9,7 +9,6 @@ mod layers;
 mod migrations;
 pub mod utils;
 pub mod config;
-pub mod api;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Db = diesel_async::pooled_connection::bb8::Pool<diesel_async::AsyncPgConnection>;
@@ -48,7 +47,7 @@ async fn main() {
     };
 
     // Load up SampleLayer
-    let th = layers::sample::SampleLayer::load(NewLayerOpts {
+    let th = layers::sample::samplelayer::SampleLayer::load(NewLayerOpts {
         config: serde_json::from_value(config["sample"].clone()).expect("Failed to deserialize config"),
         diesel,
         pool,

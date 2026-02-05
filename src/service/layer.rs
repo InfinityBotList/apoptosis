@@ -16,6 +16,7 @@ use crate::service::lua::{
     OnBrokenFunc, RuntimeCreateOpts, Vm
 };
 use crate::service::optional_value::OptionalValue;
+use crate::service::sharedlayer::SharedLayer;
 
 pub type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -327,6 +328,30 @@ impl<L: Layer> LuaUserData for Context<L> {
                 let value = lua.to_value(&event)?;
                 Ok(value)
             })
+        });
+    }
+}
+
+/// Helper struct to hold shared layer data
+#[derive(Clone)]
+pub struct SharedLayerData<T> 
+where T: Layer,
+    T::Config: Clone 
+{
+    pub cfg: LayerConfig<T>,
+    pub shared: SharedLayer,
+}
+
+impl<T> LuaUserData for SharedLayerData<T> 
+where T: Layer, T::Config: Clone 
+{
+    fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("sharedlayer", |lua, this| {
+            this.shared.as_lua_userdata(lua)
+        });
+
+        fields.add_field_method_get("config", |lua, this| {
+            this.cfg.to_lua_value(lua)
         });
     }
 }

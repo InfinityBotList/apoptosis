@@ -79,10 +79,11 @@ pub struct SessionManager {
     shared_db: SharedLayerDb,
 }
 
+#[allow(dead_code)]
 impl SessionManager {
     /// Creates a new SessionManager
     #[allow(dead_code)]
-    pub fn new(shared_db: SharedLayerDb) -> Self {
+    pub(super) fn new(shared_db: SharedLayerDb) -> Self {
         Self { shared_db }
     }
 

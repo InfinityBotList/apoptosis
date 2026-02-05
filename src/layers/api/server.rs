@@ -1,5 +1,3 @@
-use super::internal_api;
-use super::public_api;
 use axum::{
     http::StatusCode,
     routing::{get, post},
@@ -89,20 +87,20 @@ pub fn create(
 
     // Internal routes
     let internal_routes = [
-        routes!(internal_api::dispatch_event),
-        routes!(internal_api::get_threads_count),
+        //routes!(internal_api::dispatch_event),
+        //routes!(internal_api::get_threads_count),
         //routes!(internal_api::get_vm_metrics_by_tid),
         //routes!(internal_api::get_vm_metrics_for_all),
-        routes!(internal_api::guilds_exist),
-        routes!(internal_api::kill_worker),
+        //routes!(internal_api::guilds_exist),
+        //routes!(internal_api::kill_worker),
     ];
 
     // Public routes
     let public_routes = [
-        routes!(public_api::dispatch_event),
-        routes!(public_api::get_user_guilds),
-        routes!(public_api::base_guild_user_info),
-        routes!(public_api::create_oauth2_session),
+        //routes!(public_api::dispatch_event),
+        //routes!(public_api::get_user_guilds),
+        //routes!(public_api::base_guild_user_info),
+        /*routes!(public_api::create_oauth2_session),
         routes!(public_api::get_authorized_session),
         routes!(public_api::get_user_sessions_api),
         routes!(public_api::create_user_session),
@@ -111,7 +109,7 @@ pub fn create(
         routes!(public_api::api_config),
         routes!(public_api::get_bot_stats),
         routes!(public_api::list_global_kv),
-        routes!(public_api::get_global_kv),
+        routes!(public_api::get_global_kv),*/
     ];
 
     let mut oapi_router = OpenApiRouter::new();

@@ -20,6 +20,7 @@ pub(super) struct SharedLayerDb {
     diesel: Db,
 }
 
+#[allow(dead_code)]
 impl SharedLayerDb {
     fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
         Self { pool, diesel }
@@ -60,6 +61,7 @@ pub struct SharedLayer {
     shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
+#[allow(dead_code)]
 impl SharedLayer {
     /// Creates a new SharedLayer
     ///
