@@ -5,6 +5,7 @@ pub mod lua;
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
+// an integer and each bit is a flag. Just | and & operators
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct EntityFlags: u32 {
@@ -38,19 +39,19 @@ pub struct EntityInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EntityVoteInfo {
     /// The amount of votes a single vote creates on this entity
-    /// 
+    /// On weekends a vote counts as two votes, or premium bot, or blah
     /// TODO: Rename this field in the future maybe?
-    pub per_user: u32,
+    pub per_user: u8,
 
     /// The amount of time in hours until a usser can vote again
-    pub vote_time: u32,
+    pub vote_time: u16,
 }
 
 #[allow(async_fn_in_trait)]
 pub trait Entity: 'static + Send + Sync + Clone {
     /// The full object type for the entity
     type FullObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
-    /// The public object type for the entity
+    /// The public object type for the entity; used in api responses
     type PublicObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
     /// The summary (short form) object type for the entity
     type SummaryObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
