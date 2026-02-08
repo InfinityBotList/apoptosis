@@ -1,7 +1,7 @@
 use crate::Db;
 use crate::entity::EntityType;
 use crate::entity::manager::EntityManager;
-use crate::types::auth::Session;
+use crate::service::session::SessionManager;
 
 use super::cacheserver::CacheServerManager;
 use super::kittycat as srv_kittycat;
@@ -12,40 +12,28 @@ use sqlx::Row;
 use sqlx::types::Uuid;
 use std::rc::Rc;
 
-/// SharedLayer provides common methods across IBL's entire backend
-/// to both
-///
-/// Ideally, every IBL apoptosis layer will have its own SharedLayer
+/// Internally needed so other parts of SharedLayer can access the database
+/// and entity manager creation related methods
 #[derive(Clone)]
-pub struct SharedLayer {
+pub(super) struct SharedLayerDb {
     pool: sqlx::PgPool,
     diesel: Db,
-    cache_server_manager: CacheServerManager,
-
-    // Cache any computed fields here
-    cache_server_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
-    shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
-impl SharedLayer {
-    /// Creates a new SharedLayer
-    ///
-    /// Should be called once per layer
-    #[allow(dead_code)]
-    pub fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
-        Self {
-            cache_server_manager: CacheServerManager::new(pool.clone()),
-            pool,
-            diesel,
-            cache_server_manager_cache: OptionalValue::new().into(),
-            shared_layer_ud: OptionalValue::new().into(),
-        }
+#[allow(dead_code)]
+impl SharedLayerDb {
+    fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
+        Self { pool, diesel }
     }
 
-    /// Returns the SharedLayer as LuaUserData
-    pub fn as_lua_userdata(&self, lua: &Lua) -> LuaResult<LuaAnyUserData> {
-        self.shared_layer_ud
-            .get_failable(|| lua.create_userdata(self.clone()))
+    /// Returns the underlying sqlx Postgres pool
+    pub(super) fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+
+    /// Returns the underlying Diesel database connection
+    pub(super) fn diesel(&self) -> &Db {
+        &self.diesel
     }
 
     /// Returns the state of a bot by its user ID on Omni/IBL
@@ -114,27 +102,6 @@ impl SharedLayer {
         Ok(sp)
     }
 
-    /// Fetches the session of a entity given token
-    pub async fn get_session_by_token(
-        &self,
-        token: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        // Delete old/expiring auths first
-        sqlx::query("DELETE FROM api_sessions WHERE expiry < NOW()")
-            .execute(&self.pool)
-            .await?;
-
-        let session: Option<Session> = sqlx::query_as(
-            "SELECT id, name, created_at, type AS session_type, target_type, target_id, expiry 
-             FROM api_sessions WHERE token = $1 AND expiry >= NOW()",
-        )
-        .bind(token)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(session)
-    }
-
     /// Creates a new EntityManager for the given entity type
     pub fn entity_manager_for(&self, target_type: &str) -> Option<crate::entity::AnyEntityManager> {
         let Some(manager) = EntityType::from_name(target_type, self.pool.clone(), self.diesel.clone()) else {
@@ -144,11 +111,111 @@ impl SharedLayer {
     }
 }
 
-impl LuaUserData for SharedLayer {
+/// SharedLayer provides common methods across IBL's entire backend
+/// to both
+///
+/// Ideally, every IBL apoptosis layer will have its own SharedLayer
+#[derive(Clone)]
+pub struct SharedLayer {
+    db: SharedLayerDb,
+    cache_server_manager: CacheServerManager,
+    session_manager: SessionManager,
+}
+
+#[allow(dead_code)]
+impl SharedLayer {
+    /// Creates a new SharedLayer
+    ///
+    /// Should be called once per layer
+    #[allow(dead_code)]
+    pub fn new(pool: sqlx::PgPool, diesel: Db) -> Self {
+        let db = SharedLayerDb::new(pool.clone(), diesel.clone());
+        Self {
+            cache_server_manager: CacheServerManager::new(pool.clone()),
+            session_manager: SessionManager::new(db.clone()),
+            db,
+        }
+    }
+
+    /// Returns the underlying cache server manager
+    pub fn cache_server_manager(&self) -> &CacheServerManager {
+        &self.cache_server_manager
+    }
+
+    /// Returns the underlying session manager
+    pub fn session_manager(&self) -> &SessionManager {
+        &self.session_manager
+    }
+
+    /// Returns the state of a bot by its user ID on Omni/IBL
+    ///
+    /// Returns None if the bot is not found
+    pub async fn get_bot_state(&self, botid: String) -> Result<Option<String>, sqlx::Error> {
+        self.db.get_bot_state(botid).await
+    }
+
+    /// Returns the user's staff permissions on Omni/IBL
+    pub async fn get_user_staff_perms(
+        &self,
+        userid: String,
+    ) -> Result<kittycat::perms::StaffPermissions, sqlx::Error> {
+        self.db.get_user_staff_perms(userid).await
+    }
+
+    /// Creates a new EntityManager for the given entity type
+    pub fn entity_manager_for(&self, target_type: &str) -> Option<crate::entity::AnyEntityManager> {
+        self.db.entity_manager_for(target_type)
+    }
+}
+
+impl IntoLua for SharedLayer {
+    fn into_lua(self, lua: &Lua) -> LuaResult<LuaValue> {
+        let lua_shared_layer = LuaSharedLayer::new(self);
+        let ud = lua.create_userdata(lua_shared_layer)?;
+        Ok(LuaValue::UserData(ud))
+    }
+}
+
+/// Non-thread safe LuaUserData wrapper around SharedLayer
+#[derive(Clone)]
+pub struct LuaSharedLayer {
+    shared: SharedLayer,
+
+    // Cache any computed fields here
+    cache_server_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
+    session_manager_cache: Rc<OptionalValue<LuaAnyUserData>>,
+    shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
+}
+
+impl LuaSharedLayer {
+    pub fn new(shared: SharedLayer) -> Self {
+        Self {
+            shared,
+            cache_server_manager_cache: Rc::new(OptionalValue::new()),
+            session_manager_cache: Rc::new(OptionalValue::new()),
+            shared_layer_ud: Rc::new(OptionalValue::new()),
+        }
+    }
+}
+
+impl std::ops::Deref for LuaSharedLayer {
+    type Target = SharedLayer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.shared
+    }
+}
+
+impl LuaUserData for LuaSharedLayer {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("CacheServerManager", |lua, this| {
             this.cache_server_manager_cache
-                .get_failable(|| lua.create_any_userdata(this.cache_server_manager.shallow_clone()))
+                .get_failable(|| lua.create_any_userdata(this.cache_server_manager.clone()))
+        });
+
+        fields.add_field_method_get("SessionManager", |lua, this| {
+            this.session_manager_cache
+                .get_failable(|| lua.create_any_userdata(this.session_manager.clone()))
         });
     }
 
@@ -172,16 +239,5 @@ impl LuaUserData for SharedLayer {
                 .map_err(LuaError::external)?;
             Ok(state)
         });
-
-        methods.add_scheduler_async_method(
-            "GetSessionByToken",
-            |lua, this, token: String| async move {
-                let session = this
-                    .get_session_by_token(&token)
-                    .await
-                    .map_err(LuaError::external)?;
-                lua.to_value(&session)
-            },
-        );
     }
 }

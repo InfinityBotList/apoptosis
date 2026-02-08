@@ -16,6 +16,7 @@ use crate::service::lua::{
     OnBrokenFunc, RuntimeCreateOpts, Vm
 };
 use crate::service::optional_value::OptionalValue;
+use crate::service::sharedlayer::SharedLayer;
 
 pub type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -327,6 +328,50 @@ impl<L: Layer> LuaUserData for Context<L> {
                 let value = lua.to_value(&event)?;
                 Ok(value)
             })
+        });
+    }
+}
+
+/// Helper struct to hold shared layer data
+#[derive(Clone)]
+pub struct SharedLayerData<T> 
+where T: Layer,
+    T::Config: Clone 
+{
+    pub cfg: LayerConfig<T>,
+    pub shared: SharedLayer,
+    shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
+}
+
+impl<T> SharedLayerData<T> 
+where T: Layer,
+    T::Config: Clone 
+{
+    pub fn new(config: T::Config, shared: SharedLayer) -> Self {
+        Self {
+            cfg: LayerConfig::new(config),
+            shared,
+            shared_layer_ud: Rc::new(OptionalValue::new()),
+        }
+    }
+
+    /// Returns the SharedLayer as LuaUserData
+    pub fn as_lua_userdata(&self, lua: &Lua) -> LuaResult<LuaAnyUserData> {
+        self.shared_layer_ud
+            .get_failable(|| lua.create_userdata(self.clone()))
+    }
+}
+
+impl<T> LuaUserData for SharedLayerData<T> 
+where T: Layer, T::Config: Clone 
+{
+    fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("sharedlayer", |lua, this| {
+            this.as_lua_userdata(lua)
+        });
+
+        fields.add_field_method_get("config", |lua, this| {
+            this.cfg.to_lua_value(lua)
         });
     }
 }

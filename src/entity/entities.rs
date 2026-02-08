@@ -1,5 +1,8 @@
 use crate::entity::{Entity, EntityFlags, EntityInfo};
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct DummyObj {}
+
 #[derive(Debug, Clone)]
 pub struct Dummy {
     pool: sqlx::PgPool,
@@ -14,9 +17,10 @@ impl Dummy {
 }
 
 impl Entity for Dummy {
-    type FullObject = ();
-    type PublicObject = ();
-    type SummaryObject = ();
+    type FullObject = DummyObj;
+    type PublicObject = DummyObj;
+    type SummaryObject = DummyObj;
+    type CreateObject = DummyObj;
 
     fn pool(&self) -> &sqlx::PgPool {
         &self.pool
@@ -47,14 +51,18 @@ impl Entity for Dummy {
     }
 
     async fn get_full(&self, _id: &str) -> Result<Self::FullObject, crate::Error> {
-        Ok(())
+        Ok(DummyObj {})
     }
 
     async fn get_public(&self, _id: &str) -> Result<Self::PublicObject, crate::Error> {
-        Ok(())
+        Ok(DummyObj {})
     }
 
     async fn get_summary(&self, _id: &str) -> Result<Self::SummaryObject, crate::Error> {
-        Ok(())
+        Ok(DummyObj {})
+    }
+
+    async fn create(&self, _obj: Self::CreateObject) -> Result<String, crate::Error> {
+        Ok("dummy_id".to_string())
     }
 }

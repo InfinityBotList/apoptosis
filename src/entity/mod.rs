@@ -55,11 +55,17 @@ pub trait Entity: 'static + Send + Sync + Clone {
     type PublicObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
     /// The summary (short form) object type for the entity
     type SummaryObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
+    /// The create object type for the entity
+    type CreateObject: Serialize + for<'de> Deserialize<'de> + Send + Sync;
 
     /// Returns the underlying pool used by this entity
+    /// 
+    /// Not exposed to Lua
     fn pool(&self) -> &sqlx::PgPool;
 
     /// Returns the underlying diesel connection used by this entity
+    /// 
+    /// Not exposed to Lua
     fn diesel(&self) -> &crate::Db;
 
     /// Returns the name of the entity type.
@@ -99,6 +105,11 @@ pub trait Entity: 'static + Send + Sync + Clone {
 
     /// Fetches the summary (short form) object for the entity
     async fn get_summary(&self, _id: &str) -> Result<Self::SummaryObject, crate::Error>;
+
+    /// Creates a new entity from the given create object returning the ID of the created entity
+    async fn create(&self, _obj: Self::CreateObject) -> Result<String, crate::Error> {
+        Err("Entity creation not implemented for this entity type".into())
+    }
 }
 
 /// Macro to create a enum of entity types
@@ -110,7 +121,7 @@ pub trait Entity: 'static + Send + Sync + Clone {
 ///  }
 #[macro_export]
 macro_rules! entity_enum {
-    ($( $name:ident = ( $entity_type:ty, $matcher:pat, $full_type:ty, $public_type:ty, $summary_type:ty ) ),* $(,)?) => {
+    ($( $name:ident = ( $entity_type:ty, $matcher:pat, $full_type:ty, $public_type:ty, $summary_type:ty, $create_type:ty ) ),* $(,)?) => {
         #[allow(dead_code)]
         pub type AnyEntityManager = crate::entity::manager::EntityManager<EntityType>;
 
@@ -129,20 +140,25 @@ macro_rules! entity_enum {
             }
         }
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
         #[serde(tag = "type")]
         pub enum EntityEnumFullObject {
             $( $name( $full_type ), )*
         }
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
         #[serde(tag = "type")]
         pub enum EntityEnumPublicObject {
             $( $name( $public_type ), )*
         } 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
         #[serde(tag = "type")]
         pub enum EntityEnumSummaryObject {
             $( $name( $summary_type ), )*
+        }
+        #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+        #[serde(tag = "type")]
+        pub enum EntityEnumCreateObject {
+            $( $name( $create_type ), )*
         }
 
         #[allow(unused_variables)]
@@ -150,6 +166,7 @@ macro_rules! entity_enum {
             type FullObject = EntityEnumFullObject;
             type PublicObject = EntityEnumPublicObject;
             type SummaryObject = EntityEnumSummaryObject;
+            type CreateObject = EntityEnumCreateObject;
 
             fn pool(&self) -> &sqlx::PgPool {
                 match self {
@@ -225,10 +242,18 @@ macro_rules! entity_enum {
                     }, )*
                 }
             }
+
+            async fn create(&self, obj: Self::CreateObject) -> Result<String, crate::Error> {
+                match (self, obj) {
+                    $( (Self::$name(e), EntityEnumCreateObject::$name(create_obj)) => {
+                        e.create(create_obj).await
+                    }, )*
+                }
+            }
         }
     };
 }
 
 entity_enum! {
-    Dummy = (entities::Dummy, "dummy" | "dodo", (), (), ()),
+    Dummy = (entities::Dummy, "dummy" | "dodo", entities::DummyObj, entities::DummyObj, entities::DummyObj, entities::DummyObj),
 }

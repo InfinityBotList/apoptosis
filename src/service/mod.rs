@@ -9,3 +9,4 @@ pub mod discord;  // vendored from khronos
 pub mod luacore;  // vendored from khronos
 pub mod bot;
 pub mod lua;
+pub mod session;
