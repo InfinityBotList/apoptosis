@@ -16,7 +16,7 @@ use crate::service::lua::{
     OnBrokenFunc, RuntimeCreateOpts, Vm
 };
 use crate::service::optional_value::OptionalValue;
-use crate::service::sharedlayer::SharedLayer;
+use crate::service::sharedlayer::{LuaSharedLayer, SharedLayer};
 
 pub type DispatchLayerResult = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -334,44 +334,50 @@ impl<L: Layer> LuaUserData for Context<L> {
 
 /// Helper struct to hold shared layer data
 #[derive(Clone)]
-pub struct SharedLayerData<T> 
+pub struct SharedLayerData<T, U> 
 where T: Layer,
-    T::Config: Clone 
+    T::Config: Clone,
+    U: LuaUserData + Clone + 'static
 {
     pub cfg: LayerConfig<T>,
+    pub layer_data: U,
+    pub layer_data_ud: Rc<OptionalValue<LuaAnyUserData>>,
     pub shared: SharedLayer,
     shared_layer_ud: Rc<OptionalValue<LuaAnyUserData>>,
 }
 
-impl<T> SharedLayerData<T> 
+impl<T, U> SharedLayerData<T, U> 
 where T: Layer,
-    T::Config: Clone 
+    T::Config: Clone,
+    U: LuaUserData + Clone + 'static
 {
-    pub fn new(config: T::Config, shared: SharedLayer) -> Self {
+    pub fn new(config: T::Config, data: U, shared: SharedLayer) -> Self {
         Self {
             cfg: LayerConfig::new(config),
+            layer_data: data,
+            layer_data_ud: Rc::new(OptionalValue::new()),
             shared,
             shared_layer_ud: Rc::new(OptionalValue::new()),
         }
     }
-
-    /// Returns the SharedLayer as LuaUserData
-    pub fn as_lua_userdata(&self, lua: &Lua) -> LuaResult<LuaAnyUserData> {
-        self.shared_layer_ud
-            .get_failable(|| lua.create_userdata(self.clone()))
-    }
 }
 
-impl<T> LuaUserData for SharedLayerData<T> 
-where T: Layer, T::Config: Clone 
+impl<T, U> LuaUserData for SharedLayerData<T, U> 
+where T: Layer, T::Config: Clone, U: LuaUserData + Clone + 'static 
 {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("sharedlayer", |lua, this| {
-            this.as_lua_userdata(lua)
+        fields.add_field_method_get("Shared", |lua, this| {
+            this.shared_layer_ud
+                .get_failable(|| lua.create_userdata(LuaSharedLayer::new(this.shared.clone())))
         });
 
-        fields.add_field_method_get("config", |lua, this| {
+        fields.add_field_method_get("Config", |lua, this| {
             this.cfg.to_lua_value(lua)
+        });
+
+        fields.add_field_method_get("Data", |lua, this| {
+            this.layer_data_ud
+                .get_failable(|| lua.create_userdata(this.layer_data.clone()))
         });
     }
 }

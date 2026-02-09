@@ -8,6 +8,7 @@ use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::openapi::server::Server;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
+use super::public_api;
 
 use crate::service::sharedlayer::SharedLayer;
 
@@ -83,7 +84,7 @@ pub fn create(
 
     // Public routes
     let public_routes = [
-        //routes!(public_api::dispatch_event),
+        routes!(public_api::health_check),
     ];
 
     let mut oapi_router = OpenApiRouter::new();

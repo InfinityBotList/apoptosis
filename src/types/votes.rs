@@ -35,7 +35,7 @@ pub struct EntityVote {
 /// Core vote info about an entity.
 pub struct VoteInfo {
     /// The amount of votes a single vote creates on this entity
-    pub per_user: u32,
+    pub per_user: u8,
     /// The amount of time in hours until a user can vote again
     pub vote_time: u16,
     /// Whether or not the entity supports vote credits
